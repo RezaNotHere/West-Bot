@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.*
+!.env.example
+config.json
+
+# Database
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Replit specific
+.replit
+.breakpoints
+replit.nix
+
+# Debug
+.debug/
+debug.log
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Temporary files
+tmp/
+temp/
