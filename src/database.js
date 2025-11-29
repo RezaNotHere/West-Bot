@@ -91,8 +91,8 @@ function cleanupPendingAccounts() {
         }
 
         // Iterate over all pending accounts to check for expiration
-        // Use Array.from to ensure compatibility with Enmap
-        for (const [key, value] of Array.from(db.pendingAccounts.entries ? db.pendingAccounts.entries() : [])) {
+        // Enmap.entries() returns an iterator, use for...of loop
+        for (const [key, value] of db.pendingAccounts.entries()) {
             // Validate timestamp existence and format
             if (!value || typeof value !== 'object') {
                 console.warn(`[DB] Invalid pending account found for key: ${key}`);

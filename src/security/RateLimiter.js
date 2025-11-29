@@ -3,6 +3,9 @@ const configManager = require('../../configManager');
 
 class RateLimiter {
     constructor() {
+        // Logger instance (set externally)
+        this.logger = null;
+        
         // User-based rate limiting
         this.userLimits = new Map();
         // IP-based rate limiting (if available)
@@ -45,6 +48,13 @@ class RateLimiter {
         
         // Start cleanup
         this.startCleanup();
+    }
+    
+    /**
+     * Set logger instance
+     */
+    setLogger(logger) {
+        this.logger = logger;
     }
     
     /**

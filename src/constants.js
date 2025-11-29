@@ -13,9 +13,9 @@ function getConstants() {
         API_CONSTANTS: config.api,
         VALIDATION_CONSTANTS: {
             EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-            MIN_RECOVERY_CODE_LENGTH: config.validation.MIN_RECOVERY_CODE_LENGTH,
-            MIN_PASSWORD_LENGTH: config.validation.MIN_PASSWORD_LENGTH,
-            ACCOUNT_CODE_LENGTH: config.validation.ACCOUNT_CODE_LENGTH,
+            MIN_RECOVERY_CODE_LENGTH: config.validation?.MIN_RECOVERY_CODE_LENGTH || 5,
+            MIN_PASSWORD_LENGTH: config.validation?.MIN_PASSWORD_LENGTH || 3,
+            ACCOUNT_CODE_LENGTH: config.validation?.ACCOUNT_CODE_LENGTH || 6,
             REGEX_DURATION_FORMAT: /^(\d+)([smhd])$/,
         },
         ERROR_CONSTANTS: {

@@ -1,4 +1,5 @@
 const db = require('../../database').db;
+const { EmbedBuilder } = require('discord.js');
 
 /**
  * Add a warning to a user
@@ -8,13 +9,13 @@ const db = require('../../database').db;
  * @returns {Promise<number>} New warning count
  */
 async function addWarning(userId, reason, moderator) {
-    const warnings = await db.warnings.get(userId) || [];
+    const warnings = db.warnings.get(userId) || [];
     warnings.push({
         reason,
         moderatorId: moderator.id,
         timestamp: Date.now()
     });
-    await db.warnings.set(userId, warnings);
+    db.warnings.set(userId, warnings);
     return warnings.length;
 }
 
@@ -24,7 +25,7 @@ async function addWarning(userId, reason, moderator) {
  * @returns {Promise<boolean>} Success status
  */
 async function clearWarnings(userId) {
-    await db.warnings.delete(userId);
+    db.warnings.delete(userId);
     return true;
 }
 
@@ -34,7 +35,7 @@ async function clearWarnings(userId) {
  * @returns {Promise<Array>} Array of warnings
  */
 async function getWarnings(userId) {
-    return await db.warnings.get(userId) || [];
+    return db.warnings.get(userId) || [];
 }
 
 /**

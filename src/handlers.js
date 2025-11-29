@@ -1,9 +1,9 @@
 // handlers.js
 const { db } = require('./database');
 const utils = require('./utils');
-const { logAction } = require('./utils');
+const { logAction, createTicketChannel } = require('./utils');
 const transcript = require('./utils/transcript');
-const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField, MessageFlags, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const config = require('../configManager');
 
 let logger = null;
@@ -21,7 +21,7 @@ async function handleButton(interaction, client, env) {
     if (interaction.customId.startsWith('namehistory_')) {
         // Only admin or special role can access
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'You do not have permission to use this button.', ephemeral: true });
+            return interaction.reply({ content: 'You do not have permission to use this button.', flags: MessageFlags.Ephemeral });
         }
         const uuid = interaction.customId.replace('namehistory_', '');
         try {
@@ -31,21 +31,21 @@ async function handleButton(interaction, client, env) {
                     .setColor(0x2ecc71)
                     .setTitle('📜 Username History')
                     .setDescription(nameHistory.map((entry, index) =>
-                        `${index + 1}. \`${entry.name}\`${entry.changedToAt ? ` - <t:${Math.floor(entry.changedToAt/1000)}:R>` : ' (Original)'}`
+                        `${index + 1}. \`${entry.name}\`${entry.changedToAt ? ` - <t:${Math.floor(entry.changedToAt / 1000)}:R>` : ' (Original)'}`
                     ).join('\n'))
                     .setFooter({ text: `UUID: ${uuid}` });
-                await interaction.reply({ embeds: [historyEmbed], ephemeral: true });
+                await interaction.reply({ embeds: [historyEmbed], flags: MessageFlags.Ephemeral });
             } else {
                 await interaction.reply({
                     content: '❌ Username history not found.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         } catch (error) {
             console.error('Error handling name history button:', error);
             await interaction.reply({
                 content: '❌ Error fetching username history',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
         return;
@@ -55,16 +55,16 @@ async function handleButton(interaction, client, env) {
     if (interaction.customId === 'join_giveaway') {
         // فقط اعضای سرور اجازه شرکت دارند
         if (!interaction.member) {
-            return interaction.reply({ content: 'برای شرکت باید عضو سرور باشید.', ephemeral: true });
+            return interaction.reply({ content: 'You must be a server member to participate.', flags: MessageFlags.Ephemeral });
         }
         // پیدا کردن گیووای فعال بر اساس آیدی پیام
         const giveaway = db.giveaways.get(interaction.message.id);
         if (!giveaway || giveaway.ended) {
-            return interaction.reply({ content: 'گیووای فعال یافت نشد یا به پایان رسیده است.', ephemeral: true });
+            return interaction.reply({ content: 'Active giveaway not found or has ended.', flags: MessageFlags.Ephemeral });
         }
         if (!giveaway.participants) giveaway.participants = [];
         if (giveaway.participants.includes(interaction.user.id)) {
-            return interaction.reply({ content: 'شما قبلاً در گیووای شرکت کرده‌اید.', ephemeral: true });
+            return interaction.reply({ content: 'You have already joined this giveaway.', flags: MessageFlags.Ephemeral });
         }
         giveaway.participants.push(interaction.user.id);
         db.giveaways.set(interaction.message.id, giveaway);
@@ -85,22 +85,28 @@ async function handleButton(interaction, client, env) {
         } catch (err) {
             console.error('Error updating giveaway embed:', err);
         }
-        await interaction.reply({ content: 'شما با موفقیت در گیووای شرکت کردید! موفق باشید! 🎉', ephemeral: true });
+        await interaction.reply({ content: 'You have successfully joined the giveaway! Good luck! 🎉', flags: MessageFlags.Ephemeral });
         return;
     }
     console.log(`Checking role button for customId='${interaction.customId}' (startsWith 'rolebtn_': ${interaction.customId ? interaction.customId.startsWith('rolebtn_') : false})`);
     // --- Role Button Handler ---
     if (interaction.customId && interaction.customId.startsWith('rolebtn_')) {
-        // فقط ادمین یا نقش خاص اجازه دارد
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-            return interaction.reply({ content: 'شما اجازه مدیریت رول‌ها را ندارید.', ephemeral: true });
-        }
+        // Users can toggle their own roles (no permission check needed for self-role management)
         const roleId = interaction.customId.split('_')[1];
-        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (!member) {
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('❌ کاربر یافت نشد.');
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        }
         const role = interaction.guild.roles.cache.get(roleId);
         if (!role) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('❌ رول مورد نظر یافت نشد.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        }
+        // Check if bot can manage this role
+        if (role.position >= interaction.guild.members.me.roles.highest.position) {
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('❌ ربات نمی‌تواند این رول را مدیریت کند.');
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         let action, color, emoji;
         try {
@@ -116,10 +122,13 @@ async function handleButton(interaction, client, env) {
                 emoji = '➕';
             }
             const embed = new EmbedBuilder().setColor(color).setDescription(`${emoji} ${action}: <@&${roleId}>`);
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         } catch (err) {
             console.error('Error handling role button:', err);
-            await interaction.reply({ content: 'خطا در مدیریت رول.', ephemeral: true });
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در مدیریت رول. ممکن است رول بالاتر از رول ربات باشد یا دسترسی لازم وجود نداشته باشد.');
+            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         return;
     }
@@ -130,36 +139,67 @@ async function handleButton(interaction, client, env) {
 
     // Handle different button interactions
     if (customId === 'close_ticket_user') {
-        // Handle ticket transcript and close logic
-        await interaction.deferReply({ flags: 64 });
-
-        const ticketInfo = db.ticketInfo.get(channel.id);
-        if (!ticketInfo) {
-            const errorEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setDescription('❌ This channel is not a ticket or ticket information was not found.');
-            return interaction.editReply({ embeds: [errorEmbed] });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
         }
 
         try {
-            // Create close embed without transcript
+            // Handle ticket transcript and close logic
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            const ticketInfo = db.ticketInfo.get(channel.id);
+            if (!ticketInfo) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor('Red')
+                    .setDescription('❌ This channel is not a ticket or ticket information was not found.');
+                return interaction.editReply({ embeds: [errorEmbed] });
+            }
+            // Log ticket close
+            if (logger) {
+                await logger.logTicket('Closed', user, {
+                    TicketChannel: `${channel.name} (${channel.id})`,
+                    TicketOwner: `<@${ticketInfo.ownerId}>`,
+                    Reason: ticketInfo.reason || 'N/A',
+                    ClosedBy: `${user.tag} (${user.id})`
+                });
+            }
+            // Get or create "Closed Tickets" category
+            let closedCategory = guild.channels.cache.find(c => c.name === 'Closed Tickets' && c.type === 4);
+            if (!closedCategory) {
+                closedCategory = await guild.channels.create({
+                    name: 'Closed Tickets',
+                    type: 4, // GUILD_CATEGORY
+                    position: 999 // Put at bottom
+                });
+            }
+
+            // Store original category for potential reopening
+            const originalParent = channel.parent;
+
+            // Move ticket to closed category
+            await channel.setParent(closedCategory.id);
+
+            // Update permissions - remove send message permission from ticket owner
+            await channel.permissionOverwrites.edit(ticketInfo.ownerId, {
+                SendMessages: false,
+                ViewChannel: true,
+                ReadMessageHistory: true
+            });
+
+            // Send close message with embed
             const closeEmbed = new EmbedBuilder()
-                .setColor('#ff6b6b')
-                .setTitle('🔒 Ticket Closed')
-                .setDescription('This ticket has been closed. You can reopen it or delete it.')
+                .setColor('#E74C3C')
+                .setTitle('🔒 تیکت بسته شد')
+                .setDescription(`این تیکت توسط <@${user.id}> بسته شد.\n\nشما می‌توانید تاریخچه پیام‌ها را مشاهده کنید اما امکان ارسال پیام جدید وجود ندارد.\n\nبرای باز کردن مجدد تیکت، از دکمه "باز کردن مجدد" استفاده کنید.`)
                 .addFields(
-                    { name: 'Closed by', value: user.toString(), inline: true },
-                    { name: 'Ticket ID', value: channel.id, inline: true },
-                    { name: 'Ticket Owner', value: `<@${ticketInfo.ownerId}>`, inline: true }
+                    { name: '👤 بسته شده توسط', value: `<@${user.id}>`, inline: true },
+                    { name: '⏰ زمان بسته شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
                 )
+                .setFooter({ text: 'سیستم تیکت' })
                 .setTimestamp();
 
-            // Send close message with action buttons
-            const actionRow = transcript.createTicketActionRow();
-            await channel.send({
-                embeds: [closeEmbed],
-                components: [actionRow]
-            });
+            await channel.send({ embeds: [closeEmbed] });
 
             // Update ticket status to closed
             if (db.ticketInfo && db.ticketInfo.set) {
@@ -167,63 +207,86 @@ async function handleButton(interaction, client, env) {
                     ...ticketInfo,
                     status: 'closed',
                     closedBy: user.id,
-                    closedAt: Date.now()
+                    closedAt: Date.now(),
+                    originalParentId: originalParent?.id // Store for reopening
                 });
             }
 
-            // Disable original ticket buttons by updating the message
+            // Replace original buttons with closed ticket buttons
             try {
                 const messages = await channel.messages.fetch({ limit: 10 });
                 const ticketMessage = messages.find(msg =>
                     msg.author.id === client.user.id &&
-                    (msg.embeds[0]?.title?.includes('Ticket') || msg.components?.length > 0)
+                    (msg.embeds[0]?.title?.includes('Ticket') || msg.components?.length > 0) &&
+                    msg.components?.length > 0
                 );
 
                 if (ticketMessage) {
-                    // Disable all buttons in the ticket message
-                    const disabledComponents = ticketMessage.components.map(row => ({
-                        ...row.toJSON(),
-                        components: row.components.map(component => ({
-                            ...component.toJSON(),
-                            disabled: true
-                        }))
-                    }));
-
+                    // Replace with closed ticket action buttons
+                    const actionRow = transcript.createTicketActionRow();
                     await ticketMessage.edit({
                         embeds: ticketMessage.embeds,
-                        components: disabledComponents
+                        components: [actionRow]
                     });
                 }
-            } catch (disableError) {
-                console.error('Error disabling ticket buttons:', disableError);
+            } catch (replaceError) {
+                console.error('Error replacing ticket buttons:', replaceError);
             }
 
+            // Send success message to user
             const successEmbed = new EmbedBuilder()
-                .setColor('Green')
-                .setTitle('🔒 Ticket Closed')
-                .setDescription('✅ Ticket has been closed successfully.')
-                .addFields(
-                    { name: 'Ticket Owner', value: `<@${ticketInfo.ownerId}>`, inline: true },
-                    { name: 'Closed By', value: user.tag, inline: true },
-                    { name: 'Status', value: 'Closed', inline: false }
-                )
-                .setTimestamp();
+                .setColor('#2ECC71')
+                .setDescription('✅ تیکت با موفقیت بسته شد و به بخش تیکت‌های بسته منتقل گردید.');
 
             await interaction.editReply({ embeds: [successEmbed] });
-            await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
+            await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag} and moved to Closed Tickets.`);
+            
+            if (logger) {
+                await logger.logSuccess('Ticket Closed', {
+                    Ticket: `${channel.name} (${channel.id})`,
+                    ClosedBy: `${user.tag} (${user.id})`,
+                    Owner: `<@${ticketInfo.ownerId}>`,
+                    Reason: ticketInfo.reason || 'N/A'
+                }, 'Ticket System');
+            }
 
         } catch (error) {
-            console.error('Error closing ticket:', error);
-            const errorEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setDescription('❌ Error closing ticket. Please try again.');
-            await interaction.editReply({ embeds: [errorEmbed] });
+            // Only edit reply if we successfully deferred
+            if (interaction.deferred && !interaction.replied) {
+                try {
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor('Red')
+                        .setDescription('❌ Error closing ticket. Please try again.');
+                    await interaction.editReply({ embeds: [errorEmbed] });
+                } catch (replyErr) {
+                    // If edit fails, log it but don't throw
+                    if (logger) {
+                        await logger.logError(replyErr, 'Ticket Close Reply Error', {
+                            CustomId: customId,
+                            User: `${user.tag} (${user.id})`
+                        });
+                    }
+                }
+            }
+            if (logger) {
+                await logger.logError(error, 'Ticket Close Error', {
+                    CustomId: customId,
+                    User: `${user.tag} (${user.id})`,
+                    Channel: channel.name
+                });
+            } else {
+                console.error('Error closing ticket:', error);
+            }
         }
     }
     else if (customId === 'claim_ticket') {
         // Handle ticket claiming logic
-        await interaction.deferReply({ flags: 64 });
-        
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder()
@@ -231,24 +294,46 @@ async function handleButton(interaction, client, env) {
                 .setDescription('❌ اطلاعات تیکت پیدا نشد.');
             return interaction.editReply({ embeds: [errorEmbed] });
         }
-        
+
         // Update ticket info with claimer
         db.ticketInfo.set(channel.id, { ...ticketInfo, claimedBy: user.id, status: 'claimed' });
-        
+
+        const claimEmbed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setTitle('👤 تیکت تصدی شد')
+            .setDescription(`این تیکت توسط <@${user.id}> تصدی شد و اکنون در حال بررسی است.\n\nتیم پشتیبانی به زودی به درخواست شما رسیدگی خواهد کرد.`)
+            .addFields(
+                { name: '👤 تصدی شده توسط', value: `<@${user.id}>`, inline: true },
+                { name: '⏰ زمان تصدی', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+            )
+            .setFooter({ text: 'سیستم تیکت' })
+            .setTimestamp();
+
+        await channel.send({ embeds: [claimEmbed] });
+
         const successEmbed = new EmbedBuilder()
-            .setColor('Blue')
-            .setDescription(`✅ تیکت توسط ${user.tag} تصدی شد.`);
-        await channel.send({ embeds: [successEmbed] });
-        await interaction.editReply({
-            content: '✅ تیکت با موفقیت تصدی شد.',
-            flags: 64
-        });
+            .setColor('#2ECC71')
+            .setDescription('✅ تیکت با موفقیت تصدی شد.');
+
+        await interaction.editReply({ embeds: [successEmbed] });
         await logAction(guild, `👤 تیکت ${channel.name} توسط ${user.tag} تصدی شد.`);
+        
+        if (logger) {
+            await logger.logTicket('Claimed', user, {
+                TicketChannel: `${channel.name} (${channel.id})`,
+                ClaimedBy: `${user.tag} (${user.id})`,
+                Owner: `<@${ticketInfo.ownerId}>`
+            });
+        }
     }
     else if (customId === 'complete_purchase') {
         // Handle purchase completion - show rating menu
-        await interaction.deferReply({ flags: 64 });
-        
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
         const ratingMenu = new StringSelectMenuBuilder()
             .setCustomId('rating_input')
             .setPlaceholder('امتیاز خود را انتخاب کنید')
@@ -259,32 +344,34 @@ async function handleButton(interaction, client, env) {
                 new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐ 4 ستاره').setValue('4').setEmoji('⭐'),
                 new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐⭐ 5 ستاره').setValue('5').setEmoji('⭐')
             );
-        
+
         const row = new ActionRowBuilder().addComponents(ratingMenu);
-        
-        const embed = new EmbedBuilder()
-            .setColor('Green')
-            .setTitle('✅ تکمیل خرید')
-            .setDescription('خرید شما با موفقیت تکمیل شد! لطفاً تجربه خود را با ما به اشتراک بگذارید.');
-            
-        await interaction.editReply({ embeds: [embed], components: [row] });
+
+        await interaction.editReply({ content: '✅ خرید تکمیل شد', components: [row] });
         await logAction(guild, `✅ خرید کاربر ${user.tag} در تیکت ${channel.name} تکمیل شد.`);
+        
+        if (logger) {
+            await logger.logShop('Purchase Completed', user, {
+                Ticket: `${channel.name} (${channel.id})`,
+                User: `${user.tag} (${user.id})`
+            });
+        }
     }
     else if (customId === 'complete_purchase_admin') {
         // Only admins
         if (!interaction.member.permissions.has('Administrator')) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('شما دسترسی لازم برای این عملیات را ندارید.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('اطلاعات تیکت یافت نشد.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const owner = await client.users.fetch(ticketInfo.ownerId).catch(() => null);
         if (!owner) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('کاربر تیکت یافت نشد.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         // DM to ticket owner
         const dmEmbed = new EmbedBuilder()
@@ -293,7 +380,7 @@ async function handleButton(interaction, client, env) {
             .setDescription(`خبر خوش! سفارش شما در **${guild.name}** با موفقیت تکمیل و آماده استفاده است. از اعتماد شما نسبت به خدمات ما بی‌نهایت سپاسگزاریم.\n\nکیفیت و رضایت شما مهمترین اولویت ماست. لطفاً **نظر و تجربه خود را از تکمیل خرید حتماً ثبت کنید**. در صورت داشتن هرگونه سؤال، نظر یا مشکل، خوشحال می‌شویم مجدداً در خدمت شما باشیم.`)
             .addFields(
                 { name: '🏪 فروشگاه', value: guild.name, inline: true },
-                { name: '📅 تاریخ تکمیل', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true },
+                { name: '📅 تاریخ تکمیل', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
                 { name: '👤 کاربر', value: owner.tag, inline: true },
                 { name: '📋 وضعیت', value: '✅ تکمیل شده و تحویل داده شده', inline: false },
                 { name: '🔄 خدمات بعدی', value: 'برای سفارش‌های جدید می‌توانید مجدداً تیکت باز کنید', inline: false }
@@ -307,33 +394,43 @@ async function handleButton(interaction, client, env) {
             // Ignore DM errors
         }
         // Notify in ticket channel
-        const notifyEmbed = new EmbedBuilder()
-            .setColor('#9B59B6')
+        const completionEmbed = new EmbedBuilder()
+            .setColor('#2ECC71')
             .setTitle('✅ سفارش تکمیل شد')
-            .setDescription(`سفارش کاربر <@${owner.id}> با موفقیت توسط ${interaction.user} تکمیل شد.\n\n📨 **پیام اطلاع‌رسانی ارسال شد**\nپیام تکمیل سفارش با جزئیات کامل به پیام خصوصی کاربر ارسال شد.`)
+            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} با موفقیت تکمیل و تحویل داده شد.\n\nکاربر اطلاع‌رسانی شده و می‌تواند نظر خود را ثبت کند.`)
             .addFields(
-                { name: '👤 مدیر مسئول', value: interaction.user.tag, inline: true },
-                { name: '⏰ زمان تکمیل', value: `<t:${Math.floor(Date.now()/1000)}:R>`, inline: true }
+                { name: '👤 مشتری', value: `<@${owner.id}>`, inline: true },
+                { name: '🛠️ تکمیل شده توسط', value: `${interaction.user}`, inline: true },
+                { name: '⏰ زمان تکمیل', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
+            .setFooter({ text: 'سیستم تیکت' })
             .setTimestamp();
-        await interaction.reply({ embeds: [notifyEmbed] });
+
+        await interaction.reply({ embeds: [completionEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} تکمیل شد.`);
+        
+        if (logger) {
+            await logger.logModeration('Order Completed (Admin)', interaction.user, owner, {
+                Ticket: `${channel.name} (${channel.id})`,
+                Customer: `${owner.tag} (${owner.id})`
+            });
+        }
     }
     else if (customId === 'record_order_admin') {
         // Only admins can record orders
         if (!interaction.member.permissions.has('Administrator')) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('شما دسترسی لازم برای این عملیات را ندارید.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('اطلاعات تیکت یافت نشد.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const owner = await client.users.fetch(ticketInfo.ownerId).catch(() => null);
         if (!owner) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('کاربر تیکت یافت نشد.');
-            return interaction.reply({ embeds: [errorEmbed], flags: 64 });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         // DM to ticket owner for order recorded
         const dmEmbed = new EmbedBuilder()
@@ -342,7 +439,7 @@ async function handleButton(interaction, client, env) {
             .setDescription(`سفارش شما در **${guild.name}** با موفقیت ثبت شد و در صف پردازش قرار گرفت. تیم ما در حال آماده‌سازی سفارش شما هستند.\n\nبه زودی اطلاعات بیشتری درباره وضعیت سفارش‌تان دریافت خواهید کرد. لطفاً صبور باشید.`)
             .addFields(
                 { name: '🏪 فروشگاه', value: guild.name, inline: true },
-                { name: '📅 تاریخ ثبت', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true },
+                { name: '📅 تاریخ ثبت', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
                 { name: '👤 کاربر', value: owner.tag, inline: true },
                 { name: '📋 وضعیت', value: '📝 ثبت شده - در حال پردازش', inline: false },
                 { name: '⏱️ زمان تحویل', value: 'اطلاعات دقیق زمان تحویل به زودی ارسال خواهد شد', inline: false }
@@ -356,38 +453,42 @@ async function handleButton(interaction, client, env) {
             // Ignore DM errors
         }
         // Notify in ticket channel
-        const notifyEmbed = new EmbedBuilder()
-            .setColor('#9B59B6')
+        const recordEmbed = new EmbedBuilder()
+            .setColor('#3498DB')
             .setTitle('📝 سفارش ثبت شد')
-            .setDescription(`سفارش کاربر <@${owner.id}> با موفقیت توسط ${interaction.user} ثبت شد.\n\n📨 **پیام اطلاع‌رسانی ارسال شد**\nپیام تأیید ثبت سفارش به پیام خصوصی کاربر ارسال شد.`)
+            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} ثبت شد و در صف پردازش قرار گرفت.\n\nکاربر اطلاع‌رسانی شده و منتظر تکمیل سفارش است.`)
             .addFields(
-                { name: '👤 مدیر مسئول', value: interaction.user.tag, inline: true },
-                { name: '⏰ زمان ثبت', value: `<t:${Math.floor(Date.now()/1000)}:R>`, inline: true }
+                { name: '👤 مشتری', value: `<@${owner.id}>`, inline: true },
+                { name: '📋 ثبت شده توسط', value: `${interaction.user}`, inline: true },
+                { name: '⏰ زمان ثبت', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
+            .setFooter({ text: 'سیستم تیکت' })
             .setTimestamp();
-        await interaction.reply({ embeds: [notifyEmbed] });
+
+        await interaction.reply({ embeds: [recordEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} ثبت شد.`);
+        
+        if (logger) {
+            await logger.logModeration('Order Recorded (Admin)', interaction.user, owner, {
+                Ticket: `${channel.name} (${channel.id})`,
+                Customer: `${owner.tag} (${owner.id})`
+            });
+        }
     }
     else if (customId === 'transcript_ticket') {
         // Handle ticket transcript generation
-        await interaction.deferReply({ flags: 64 });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Generate transcript
             const transcriptFile = await transcript.createTranscriptFile(channel);
 
-            const transcriptEmbed = new EmbedBuilder()
-                .setColor('Blue')
-                .setTitle('📄 Ticket Transcript')
-                .setDescription('Here is the transcript for this ticket.')
-                .addFields(
-                    { name: 'Generated by', value: user.tag, inline: true },
-                    { name: 'Generated at', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
-                )
-                .setTimestamp();
-
             await interaction.editReply({
-                embeds: [transcriptEmbed],
+                content: '📄 Transcript generated',
                 files: [transcriptFile]
             });
 
@@ -402,60 +503,167 @@ async function handleButton(interaction, client, env) {
     else if (customId === 'ticket_reopen') {
         // Handle ticket reopening
         if (!interaction.member.permissions.has('ManageChannels')) {
-            return await interaction.reply({
-                content: '❌ You do not have permission to manage tickets.',
-                flags: 64
-            });
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ شما اجازه مدیریت تیکت‌ها را ندارید.');
+            return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ flags: 64 });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        
+        // Defer reply with error handling
+        try {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        } catch (err) {
+            // If defer fails, interaction has expired
+            console.log('Interaction expired for ticket_reopen');
+            return;
+        }
 
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('❌ Ticket information not found.');
+                .setDescription('❌ اطلاعات تیکت یافت نشد.');
             return interaction.editReply({ embeds: [errorEmbed] });
         }
 
-        // Update ticket status to open
-        if (db.ticketInfo && db.ticketInfo.set) {
-            db.ticketInfo.set(channel.id, {
-                ...ticketInfo,
-                status: 'open',
-                reopenedBy: user.id,
-                reopenedAt: Date.now()
+        try {
+            // Move ticket back to original category if it exists
+            if (ticketInfo.originalParentId) {
+                const originalCategory = guild.channels.cache.get(ticketInfo.originalParentId);
+                if (originalCategory) {
+                    await channel.setParent(originalCategory.id);
+                }
+            }
+
+            // Restore send message permission for ticket owner
+            await channel.permissionOverwrites.edit(ticketInfo.ownerId, {
+                SendMessages: true,
+                ViewChannel: true,
+                ReadMessageHistory: true
             });
+
+            // Update ticket status to open
+            if (db.ticketInfo && db.ticketInfo.set) {
+                db.ticketInfo.set(channel.id, {
+                    ...ticketInfo,
+                    status: 'open',
+                    reopenedBy: user.id,
+                    reopenedAt: Date.now()
+                });
+            }
+
+            // Send reopen message with embed
+            const reopenEmbed = new EmbedBuilder()
+                .setColor('#3498DB')
+                .setTitle('🔓 تیکت مجدداً باز شد')
+                .setDescription(`این تیکت توسط <@${user.id}> مجدداً باز شد.\n\nاکنون می‌توانید پیام‌های جدید ارسال کنید و با تیم پشتیبانی در ارتباط باشید.`)
+                .addFields(
+                    { name: '👤 باز شده توسط', value: `<@${user.id}>`, inline: true },
+                    { name: '⏰ زمان باز شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                )
+                .setFooter({ text: 'سیستم تیکت' })
+                .setTimestamp();
+
+            await channel.send({ embeds: [reopenEmbed] });
+
+            // Restore original ticket buttons
+            try {
+                const messages = await channel.messages.fetch({ limit: 20 });
+                const ticketMessage = messages.find(msg =>
+                    msg.author.id === client.user.id &&
+                    msg.embeds[0]?.title?.includes('تیکت') &&
+                    msg.components?.length > 0
+                );
+
+                if (ticketMessage) {
+                    // Recreate original buttons from config
+                    const ticketConfig = config.ticketSystem;
+
+                    const userButtons = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('complete_purchase')
+                            .setLabel(ticketConfig.buttons.user.completePurchase.label)
+                            .setStyle(ButtonStyle[ticketConfig.buttons.user.completePurchase.style]),
+                        new ButtonBuilder()
+                            .setCustomId('close_ticket_user')
+                            .setLabel(ticketConfig.buttons.user.closeTicket.label)
+                            .setStyle(ButtonStyle[ticketConfig.buttons.user.closeTicket.style]),
+                        new ButtonBuilder()
+                            .setCustomId('claim_ticket')
+                            .setLabel(ticketConfig.buttons.admin.claimTicket.label)
+                            .setStyle(ButtonStyle[ticketConfig.buttons.admin.claimTicket.style])
+                    );
+
+                    const adminButtons = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('record_order_admin')
+                            .setLabel(ticketConfig.buttons.admin.recordOrder.label)
+                            .setStyle(ButtonStyle[ticketConfig.buttons.admin.recordOrder.style]),
+                        new ButtonBuilder()
+                            .setCustomId('complete_purchase_admin')
+                            .setLabel(ticketConfig.buttons.admin.completePurchase.label)
+                            .setStyle(ButtonStyle[ticketConfig.buttons.admin.completePurchase.style])
+                    );
+
+                    await ticketMessage.edit({
+                        embeds: ticketMessage.embeds,
+                        components: [userButtons, adminButtons]
+                    });
+                }
+            } catch (enableError) {
+                console.error('Error restoring ticket buttons:', enableError);
+            }
+
+            const successEmbed = new EmbedBuilder()
+                .setColor('#2ECC71')
+                .setDescription('✅ تیکت با موفقیت مجدداً باز شد.');
+
+            await interaction.editReply({ embeds: [successEmbed] });
+            await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
+            
+            if (logger) {
+                await logger.logTicket('Reopened', user, {
+                    TicketChannel: `${channel.name} (${channel.id})`,
+                    ReopenedBy: `${user.tag} (${user.id})`,
+                    Owner: `<@${ticketInfo.ownerId}>`
+                });
+            }
+
+        } catch (error) {
+            console.error('Error reopening ticket:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
+            await interaction.editReply({ embeds: [errorEmbed] });
         }
-
-        const reopenEmbed = new EmbedBuilder()
-            .setColor('Green')
-            .setTitle('🔓 Ticket Reopened')
-            .setDescription(`This ticket has been reopened by ${user.tag}.`)
-            .addFields(
-                { name: 'Reopened by', value: user.tag, inline: true },
-                { name: 'Reopened at', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
-            )
-            .setTimestamp();
-
-        await channel.send({ embeds: [reopenEmbed] });
-        await interaction.editReply({
-            content: '✅ Ticket reopened successfully.',
-            flags: 64
-        });
-
-        await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
     }
     else if (customId === 'ticket_delete') {
         // Handle ticket deletion
         if (!interaction.member.permissions.has('ManageChannels')) {
             return await interaction.reply({
                 content: '❌ You do not have permission to manage tickets.',
-                flags: 64
+                flags: MessageFlags.Ephemeral
             });
         }
 
-        await interaction.deferReply({ flags: 64 });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        
+        // Defer reply with error handling
+        try {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        } catch (err) {
+            // If defer fails, interaction has expired
+            console.log('Interaction expired for ticket_delete');
+            return;
+        }
 
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
@@ -468,14 +676,9 @@ async function handleButton(interaction, client, env) {
         // Send final message
         const deleteEmbed = new EmbedBuilder()
             .setColor('Red')
-            .setTitle('🗑️ Ticket Deleted')
-            .setDescription(`This ticket has been deleted by ${user.tag}.`)
-            .addFields(
-                { name: 'Deleted by', value: user.tag, inline: true },
-                { name: 'Deleted at', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
-            )
+            .setTitle('🗑️ تیکت حذف شد')
+            .setDescription(`تیکت توسط ${user.tag} حذف شد.`)
             .setTimestamp();
-
         await channel.send({ embeds: [deleteEmbed] });
 
         // Delete ticket from database
@@ -487,24 +690,49 @@ async function handleButton(interaction, client, env) {
         }
 
         await interaction.editReply({
-            content: '✅ Ticket deleted successfully. This channel will be deleted in 5 seconds.',
-            flags: 64
+            content: '✅ Ticket deleted successfully. This channel will be deleted in 5 seconds.'
         });
 
         await logAction(guild, `🗑️ Ticket ${channel.name} deleted by ${user.tag}.`);
+        
+        if (logger) {
+            await logger.logTicket('Deleted', user, {
+                TicketChannel: `${channel.name} (${channel.id})`,
+                DeletedBy: `${user.tag} (${user.id})`,
+                Owner: `<@${ticketInfo.ownerId}>`
+            });
+        }
 
-        // Delete channel after 5 seconds
+        // Delete channel and its category after 5 seconds
         setTimeout(async () => {
             try {
+                const parentCategory = channel.parent;
                 await channel.delete();
+                
+                // Delete the parent category if it exists and is empty
+                if (parentCategory && parentCategory.type === 4) { // 4 is Category
+                    try {
+                        // Check if category has any remaining channels
+                        const remainingChannels = await parentCategory.children.fetch().catch(() => null);
+                        if (!remainingChannels || remainingChannels.size === 0) {
+                            await parentCategory.delete();
+                        }
+                    } catch (categoryError) {
+                        console.error('Error deleting category:', categoryError);
+                    }
+                }
             } catch (e) {
-                console.error('Error deleting ticket channel:', e);
+                console.error('Error deleting ticket channel or category:', e);
             }
         }, 5000);
     }
     else {
         // Handle unknown button
-        await interaction.deferReply({ flags: 64 });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         console.log(`Unknown button clicked: customId='${interaction.customId}', user='${interaction.user.id}', guild='${interaction.guild.id}'`);
         const errorEmbed = new EmbedBuilder()
             .setColor('Red')
@@ -518,10 +746,10 @@ async function handleSelectMenu(interaction, client, env) {
     if (interaction.customId === 'select_capes') {
         // فقط ادمین یا نقش خاص اجازه دارد
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return await interaction.reply({ content: 'شما اجازه استفاده از این منو را ندارید.', ephemeral: true });
+            return await interaction.reply({ content: 'You do not have permission to use this menu.', flags: MessageFlags.Ephemeral });
         }
         try {
-            await interaction.deferReply({ ephemeral: false });
+            await interaction.deferReply();
             const username = interaction.message.embeds[0]?.fields?.find(f => f.name.includes('نام کاربری'))?.value?.replace(/[`>\s]/g, '') || 'Unknown';
             let uuid = null;
             try {
@@ -559,9 +787,6 @@ async function handleSelectMenu(interaction, client, env) {
         return;
     }
     const { customId, values, user, guild } = interaction;
-    const { db } = require('./database');
-    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
-    const { createTicketChannel, logAction } = require('./utils');
     const REVIEW_CHANNEL_ID = config.channels.review;
     const BUYER_ROLE_ID = config.roles.buyer;
 
@@ -582,7 +807,7 @@ async function handleSelectMenu(interaction, client, env) {
                 .setPlaceholder('Enter any additional information...')
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(false);
-            
+
             modal.addComponents(new ActionRowBuilder().addComponents(detailsInput));
             return interaction.showModal(modal);
         }
@@ -594,14 +819,27 @@ async function handleSelectMenu(interaction, client, env) {
             return interaction.showModal(modal);
         }
 
-        await interaction.deferReply({ flags: 64 });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (db.tickets.has(user.id)) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ شما از قبل یک تیکت باز دارید: <#${db.tickets.get(user.id)}>`);
             return interaction.editReply({ embeds: [errorEmbed] });
         }
         await createTicketChannel(guild, user, reason);
-        const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما ساخته شد: <#${db.tickets.get(user.id)}>`);
+        const ticketChannelId = db.tickets.get(user.id);
+        const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما ساخته شد: <#${ticketChannelId}>`);
         await interaction.editReply({ embeds: [successEmbed] });
+        
+        if (logger) {
+            await logger.logTicket('Created', user, {
+                TicketChannel: ticketChannelId ? `<#${ticketChannelId}>` : 'N/A',
+                Reason: reason,
+                Category: reason
+            });
+        }
     }
 
     if (customId === 'rating_input') {
@@ -617,14 +855,16 @@ async function handleSelectMenu(interaction, client, env) {
 // --- handleModal ---
 async function handleModal(interaction, client, env) {
     const { customId, fields, user, guild } = interaction;
-    const { db } = require('./database');
-    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
-    const { createTicketChannel, logAction } = require('./utils');
     const REVIEW_CHANNEL_ID = config.channels.review;
     const BUYER_ROLE_ID = config.roles.buyer;
 
     if (customId.startsWith('review_comment_modal_')) {
         try {
+            // Check if interaction is already replied/deferred
+            if (interaction.replied || interaction.deferred) {
+                return;
+            }
+
             const rating = customId.split('_')[3];
             const comment = fields.getTextInputValue('comment_input');
             const stars = '⭐'.repeat(parseInt(rating));
@@ -633,62 +873,170 @@ async function handleModal(interaction, client, env) {
             if (reviewChannel && reviewChannel.isTextBased()) {
                 const embed = new EmbedBuilder()
                     .setColor('Gold')
-                    .setTitle('⭐ نظر جدید ثبت شد ⭐')
+                    .setTitle('⭐ New Review Submitted ⭐')
                     .setAuthor({ name: user.username, iconURL: user.displayAvatarURL() })
-                    .addFields({ name: 'امتیاز ثبت شده', value: stars, inline: true })
+                    .addFields({ name: 'Rating', value: stars, inline: true })
                     .setTimestamp();
 
-                if (comment) embed.addFields({ name: 'نظر کاربر', value: comment, inline: false });
+                if (comment) embed.addFields({ name: 'User Comment', value: comment, inline: false });
                 await reviewChannel.send({ embeds: [embed] });
             }
 
-            const successEmbed = new EmbedBuilder().setColor('Green').setDescription('ممنون! نظر و امتیاز شما با موفقیت ثبت شد.');
-            await interaction.reply({ embeds: [successEmbed], flags: 64 });
+            const successEmbed = new EmbedBuilder().setColor('Green').setDescription('Thank you! Your review and rating have been submitted successfully.');
+            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
 
             if (BUYER_ROLE_ID) {
                 const member = await guild.members.fetch(user.id);
                 await member.roles.add(BUYER_ROLE_ID);
             }
         } catch (err) {
-            console.error('Error handling review modal:', err);
-            await interaction.reply({ content: '❌ خطا در ثبت نظر یا امتیاز.', ephemeral: true });
+            // Only reply if not already replied
+            if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({ content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
+                } catch (replyErr) {
+                    // If reply fails, log it but don't throw
+                    if (logger) {
+                        await logger.logError(replyErr, 'Modal Reply Error', {
+                            CustomId: customId,
+                            User: `${user.tag} (${user.id})`
+                        });
+                    }
+                }
+            }
+            if (logger) {
+                await logger.logError(err, 'Review Modal', {
+                    CustomId: customId,
+                    User: `${user.tag} (${user.id})`
+                });
+            } else {
+                console.error('Error handling review modal:', err);
+            }
         }
         return;
     }
 
     if (customId.startsWith('ticket_details_modal_')) {
         try {
+            // Defer reply immediately to prevent timeout
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+
             const reason = customId.replace('ticket_details_modal_', '');
             const details = fields.getTextInputValue('ticket_details') || '';
 
             // Check if user already has a ticket
             if (db.tickets && db.tickets.has && db.tickets.has(user.id)) {
-                const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ شما از قبل یک تیکت باز دارید: <#${db.tickets.get(user.id)}>`);
-                return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+                const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ You already have an open ticket: <#${db.tickets.get(user.id)}>`);
+                return interaction.editReply({ embeds: [errorEmbed] });
             }
 
             // Create ticket channel with details
             await createTicketChannel(guild, user, reason, null, details);
             const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
-            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
-            await interaction.reply({ embeds: [successEmbed], flags: 64 });
+            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ Your ticket has been created successfully${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
+            await interaction.editReply({ embeds: [successEmbed] });
+            
+            if (logger) {
+                await logger.logTicket('Created (with details)', user, {
+                    TicketChannel: ticketChannelId ? `<#${ticketChannelId}>` : 'N/A',
+                    Reason: reason,
+                    Category: reason,
+                    HasDetails: details ? 'Yes' : 'No'
+                });
+            }
         } catch (err) {
-            console.error('Error handling ticket details modal:', err);
-            await interaction.reply({ content: '❌ خطا در ساخت تیکت.', ephemeral: true });
+            // Only edit reply if deferred
+            if (interaction.deferred && !interaction.replied) {
+                try {
+                    await interaction.editReply({ content: '❌ Error creating ticket.' });
+                } catch (replyErr) {
+                    // If editReply fails, log it but don't throw
+                    if (logger) {
+                        await logger.logError(replyErr, 'Modal Reply Error', {
+                            CustomId: customId,
+                            User: `${user.tag} (${user.id})`
+                        });
+                    }
+                }
+            } else if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                } catch (replyErr) {
+                    // If reply fails, log it but don't throw
+                    if (logger) {
+                        await logger.logError(replyErr, 'Modal Reply Error', {
+                            CustomId: customId,
+                            User: `${user.tag} (${user.id})`
+                        });
+                    }
+                }
+            }
+            
+            if (logger) {
+                await logger.logError(err, 'Ticket Details Modal', {
+                    CustomId: customId,
+                    User: `${user.tag} (${user.id})`,
+                    Reason: reason
+                });
+            }
         }
-        return;
     }
 
     if (customId === 'other_reason_modal') {
-        const reason = fields.getTextInputValue('other_reason_input');
-        await createTicketChannel(guild, user, 'غیره', reason);
-        const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
-        const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
-        await interaction.reply({ embeds: [successEmbed], flags: 64 });
+        try {
+            // Check if interaction is already replied/deferred
+            if (interaction.replied || interaction.deferred) {
+                return;
+            }
+            
+            const reason = fields.getTextInputValue('other_reason_input');
+            await createTicketChannel(guild, user, 'other', reason);
+            const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
+            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
+            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            
+            if (logger) {
+                await logger.logTicket('Created (other)', user, {
+                    TicketChannel: ticketChannelId ? `<#${ticketChannelId}>` : 'N/A',
+                    Reason: reason,
+                    Category: 'other'
+                });
+            }
+        } catch (err) {
+            // Only reply if not already replied
+            if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                } catch (replyErr) {
+                    // If reply fails, log it but don't throw
+                    if (logger) {
+                        await logger.logError(replyErr, 'Modal Reply Error', {
+                            CustomId: customId,
+                            User: `${user.tag} (${user.id})`
+                        });
+                    }
+                }
+            }
+            
+            if (logger) {
+                await logger.logError(err, 'Other Reason Modal', {
+                    CustomId: customId,
+                    User: `${user.tag} (${user.id})`
+                });
+            } else {
+                console.error('Error handling other reason modal:', err);
+            }
+        }
     }
 
     if (customId.startsWith('sendmessage_modal_')) {
-        await interaction.deferReply({ flags: 64 });
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const parts = customId.split('_');
@@ -718,7 +1066,7 @@ async function handleModal(interaction, client, env) {
                     .setDescription(text)
                     .setFooter({ text: `ارسال شده توسط ${interaction.user.tag} از سرور ${guild.name}` })
                     .setTimestamp();
-                
+
                 if (embedTitle) {
                     embed.setTitle(embedTitle);
                 }
@@ -729,15 +1077,21 @@ async function handleModal(interaction, client, env) {
 
             // Try to send to user first
             const target = await interaction.client.users.fetch(targetId).catch(() => null);
-            
+
             if (target) {
                 try {
                     await target.send(messageContent);
-                    await interaction.editReply({ 
-                        content: `✅ پیام با موفقیت به کاربر ${target.tag} ارسال شد.`, 
-                        flags: 64 
+                    await interaction.editReply({
+                        content: `✅ Message sent successfully to ${target.tag}.`
                     });
                     await logAction(guild, `📩 ${interaction.user.tag} پیامی به کاربر ${target.tag} ارسال کرد.`);
+                    
+                    if (logger) {
+                        await logger.logModeration('Message Sent (DM)', interaction.user, target, {
+                            MessageType: useEmbed ? 'Embed' : 'Text',
+                            Color: color
+                        });
+                    }
                 } catch (dmError) {
                     throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
                 }
@@ -748,17 +1102,24 @@ async function handleModal(interaction, client, env) {
                     throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
                 }
                 await channel.send(messageContent);
-                await interaction.editReply({ 
-                    content: `✅ پیام با موفقیت در کانال ${channel.name} ارسال شد.`, 
-                    flags: 64 
+                await interaction.editReply({
+                    content: `✅ Message sent successfully to channel ${channel.name}.`
                 });
                 await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
+                
+                if (logger) {
+                    await logger.logModeration('Message Sent (Channel)', interaction.user, 
+                        { tag: 'System', id: '0' }, {
+                        Channel: `${channel.name} (${channel.id})`,
+                        MessageType: useEmbed ? 'Embed' : 'Text',
+                        Color: color
+                    });
+                }
             }
         } catch (error) {
             console.error('Error in sendmessage modal:', error);
-            await interaction.editReply({ 
-                content: `❌ خطا در ارسال پیام: ${error.message}`, 
-                flags: 64 
+            await interaction.editReply({
+                content: `❌ Error sending message: ${error.message}`
             });
         }
     }

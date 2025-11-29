@@ -1,4 +1,4 @@
-// Central Security Management System
+// Central Security Management System with Enhanced Logging
 const RateLimiter = require('./RateLimiter');
 const AntiSpam = require('./AntiSpam');
 const AntiRaid = require('./AntiRaid');
@@ -8,6 +8,9 @@ class SecurityManager {
         this.rateLimiter = new RateLimiter();
         this.antiSpam = new AntiSpam();
         this.antiRaid = new AntiRaid();
+        
+        // Logger instance (set externally)
+        this.logger = null;
         
         // Blacklist system
         this.blacklist = {
@@ -36,6 +39,7 @@ class SecurityManager {
             spamDetected: 0,
             raidsDetected: 0,
             blacklistBlocks: 0,
+            rateLimitBlocks: 0,
             startTime: Date.now()
         };
         
@@ -43,15 +47,24 @@ class SecurityManager {
     }
     
     /**
-     * Check interaction security
-     * @param {Interaction} interaction 
-     * @returns {Object} { allowed: boolean, reason: string }
+     * Set logger instance
+     */
+    setLogger(logger) {
+        this.logger = logger;
+        this.rateLimiter.setLogger(logger);
+        this.antiSpam.setLogger(logger);
+        this.antiRaid.setLogger(logger);
+    }
+    
+    /**
+     * Check interaction security with enhanced logging
      */
     async checkInteraction(interaction) {
         this.stats.totalRequests++;
         
         const userId = interaction.user.id;
-        const commandName = interaction.commandName;
+        const commandName = interaction.commandName || interaction.customId || 'Unknown';
+        const guildId = interaction.guild?.id || 'DM';
         
         // Check if user is admin (bypass all)
         if (this.adminIds.has(userId)) {
@@ -78,10 +91,23 @@ class SecurityManager {
             this.stats.blacklistBlocks++;
             this.logSecurityEvent('BLACKLIST_BLOCK', userId, commandName, 'User is blacklisted');
             
+            if (this.logger) {
+                await this.logger.logSecurity('Blacklist Block', 
+                    `User ${interaction.user.tag} attempted to use ${commandName}`,
+                    {
+                        User: `${interaction.user.tag} (${userId})`,
+                        Command: commandName,
+                        Guild: guildId,
+                        Reason: 'User is blacklisted'
+                    },
+                    'high'
+                );
+            }
+            
             return {
                 allowed: false,
                 reason: 'BLACKLISTED',
-                message: '🚫 شما از استفاده از این ربات مسدود شده‌اید.'
+                message: '🚫 You are blacklisted from using this bot.'
             };
         }
         
@@ -89,10 +115,22 @@ class SecurityManager {
             this.stats.blacklistBlocks++;
             this.logSecurityEvent('BLACKLIST_BLOCK', userId, commandName, 'Guild is blacklisted');
             
+            if (this.logger) {
+                await this.logger.logSecurity('Guild Blacklist Block',
+                    `Guild ${interaction.guild.name} is blacklisted`,
+                    {
+                        User: `${interaction.user.tag} (${userId})`,
+                        Guild: `${interaction.guild.name} (${interaction.guild.id})`,
+                        Command: commandName
+                    },
+                    'high'
+                );
+            }
+            
             return {
                 allowed: false,
                 reason: 'GUILD_BLACKLISTED',
-                message: '🚫 این سرور از استفاده از ربات مسدود شده است.'
+                message: '🚫 This server is blacklisted from using this bot.'
             };
         }
         
@@ -100,12 +138,27 @@ class SecurityManager {
         const rateCheck = this.rateLimiter.checkLimit(userId, commandName);
         if (!rateCheck.allowed) {
             this.stats.blockedRequests++;
+            this.stats.rateLimitBlocks++;
             this.logSecurityEvent('RATE_LIMIT', userId, commandName, rateCheck.reason);
+            
+            if (this.logger) {
+                await this.logger.logSecurity('Rate Limit Exceeded',
+                    `User ${interaction.user.tag} exceeded rate limit`,
+                    {
+                        User: `${interaction.user.tag} (${userId})`,
+                        Command: commandName,
+                        Reason: rateCheck.reason,
+                        RetryAfter: `${rateCheck.retryAfter || 0}s`,
+                        Guild: guildId
+                    },
+                    'medium'
+                );
+            }
             
             return {
                 allowed: false,
                 reason: rateCheck.reason,
-                message: rateCheck.message,
+                message: rateCheck.message || '⏱️ Rate limit exceeded. Please wait.',
                 retryAfter: rateCheck.retryAfter
             };
         }
@@ -114,9 +167,7 @@ class SecurityManager {
     }
     
     /**
-     * Check message security
-     * @param {Message} message 
-     * @returns {Object} { allowed: boolean, reason: string, action: string }
+     * Check message security with enhanced logging
      */
     async checkMessage(message) {
         // Ignore bots
@@ -125,6 +176,7 @@ class SecurityManager {
         }
         
         const userId = message.author.id;
+        const guildId = message.guild?.id || 'DM';
         
         // Check if user is admin (bypass spam check)
         if (this.adminIds.has(userId)) {
@@ -140,6 +192,19 @@ class SecurityManager {
         if (this.blacklist.users.has(userId)) {
             try {
                 await message.delete();
+                
+                if (this.logger) {
+                    await this.logger.logSecurity('Blacklisted Message Deleted',
+                        `Deleted message from blacklisted user ${message.author.tag}`,
+                        {
+                            User: `${message.author.tag} (${userId})`,
+                            Channel: `${message.channel.name} (${message.channel.id})`,
+                            Guild: guildId,
+                            Content: message.content.substring(0, 100)
+                        },
+                        'high'
+                    );
+                }
             } catch (err) {
                 console.error('[SecurityManager] Failed to delete blacklisted user message:', err.message);
             }
@@ -157,6 +222,22 @@ class SecurityManager {
             this.stats.spamDetected++;
             this.logSecurityEvent('SPAM_DETECTED', userId, null, `${spamCheck.reason} - ${spamCheck.action}`);
             
+            if (this.logger) {
+                await this.logger.logSecurity('Spam Detected',
+                    `Spam detected from ${message.author.tag}`,
+                    {
+                        User: `${message.author.tag} (${userId})`,
+                        Reason: spamCheck.reason,
+                        Severity: spamCheck.severity,
+                        Action: spamCheck.action,
+                        Channel: `${message.channel.name} (${message.channel.id})`,
+                        Guild: guildId,
+                        Warnings: spamCheck.warnings || 0
+                    },
+                    spamCheck.severity === 'HIGH' ? 'high' : 'medium'
+                );
+            }
+            
             return {
                 allowed: false,
                 reason: spamCheck.reason,
@@ -169,17 +250,28 @@ class SecurityManager {
     }
     
     /**
-     * Check member join security
-     * @param {GuildMember} member 
-     * @returns {Object} { allowed: boolean, reason: string, action: string }
+     * Check member join security with enhanced logging
      */
     async checkMemberJoin(member) {
         const userId = member.user.id;
+        const guildId = member.guild.id;
         
         // Check blacklist
         if (this.blacklist.users.has(userId)) {
             try {
                 await member.kick('Blacklisted user');
+                
+                if (this.logger) {
+                    await this.logger.logSecurity('Blacklisted User Kicked',
+                        `Kicked blacklisted user ${member.user.tag} on join`,
+                        {
+                            User: `${member.user.tag} (${userId})`,
+                            Guild: `${member.guild.name} (${guildId})`,
+                            AccountAge: `${Math.floor((Date.now() - member.user.createdTimestamp) / 86400000)} days`
+                        },
+                        'high'
+                    );
+                }
             } catch (err) {
                 console.error('[SecurityManager] Failed to kick blacklisted user:', err.message);
             }
@@ -197,6 +289,21 @@ class SecurityManager {
             this.stats.raidsDetected++;
             this.logSecurityEvent('RAID_DETECTED', userId, null, `${raidCheck.reason} - ${raidCheck.action}`);
             
+            if (this.logger) {
+                await this.logger.logSecurity('Raid Detected',
+                    `Raid detected in ${member.guild.name}`,
+                    {
+                        User: `${member.user.tag} (${userId})`,
+                        Guild: `${member.guild.name} (${guildId})`,
+                        Reason: raidCheck.reason,
+                        Severity: raidCheck.severity,
+                        Action: raidCheck.action,
+                        Lockdown: raidCheck.lockdown ? 'Enabled' : 'Not Enabled'
+                    },
+                    raidCheck.severity === 'CRITICAL' ? 'critical' : 'high'
+                );
+            }
+            
             return {
                 allowed: false,
                 reason: raidCheck.reason,
@@ -208,14 +315,23 @@ class SecurityManager {
         return { allowed: true };
     }
     
-    // Blacklist management
-    addToBlacklist(type, id) {
+    // Blacklist management with logging
+    addToBlacklist(type, id, reason = '') {
         if (!['user', 'guild', 'ip'].includes(type)) {
             return false;
         }
         
         this.blacklist[type + 's'].add(id);
-        this.logSecurityEvent('BLACKLIST_ADD', 'SYSTEM', null, `Added ${type}: ${id}`);
+        this.logSecurityEvent('BLACKLIST_ADD', 'SYSTEM', null, `Added ${type}: ${id} - ${reason}`);
+        
+        if (this.logger) {
+            this.logger.logSecurity('Blacklist Added',
+                `${type} ${id} added to blacklist`,
+                { Type: type, ID: id, Reason: reason || 'No reason provided' },
+                'high'
+            );
+        }
+        
         console.log(`[SecurityManager] Added to blacklist: ${type} ${id}`);
         return true;
     }
@@ -228,6 +344,15 @@ class SecurityManager {
         const removed = this.blacklist[type + 's'].delete(id);
         if (removed) {
             this.logSecurityEvent('BLACKLIST_REMOVE', 'SYSTEM', null, `Removed ${type}: ${id}`);
+            
+            if (this.logger) {
+                this.logger.logSecurity('Blacklist Removed',
+                    `${type} ${id} removed from blacklist`,
+                    { Type: type, ID: id },
+                    'medium'
+                );
+            }
+            
             console.log(`[SecurityManager] Removed from blacklist: ${type} ${id}`);
         }
         return removed;

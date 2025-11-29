@@ -90,6 +90,21 @@ class TicketTranscript {
         );
     }
 
+    createTicketOpenActionRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ticket_close')
+                .setLabel('Close Ticket')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🔒'),
+            new ButtonBuilder()
+                .setCustomId('transcript_ticket')
+                .setLabel('Transcript')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('📄')
+        );
+    }
+
     // Cleanup old transcripts
     cleanupOldTranscripts(maxAge = 7 * 24 * 60 * 60 * 1000) {
         try {

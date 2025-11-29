@@ -3,6 +3,9 @@ const configManager = require('../../configManager');
 
 class AntiRaid {
     constructor() {
+        // Logger instance (set externally)
+        this.logger = null;
+        
         this.joinTracking = new Map();
         this.raidSuspects = new Set();
         this.serverLockdown = new Map();
@@ -33,6 +36,13 @@ class AntiRaid {
             requireVerificationOnRaid: true,
             verificationRole: null, // Set via setVerificationRole()
         };
+    }
+    
+    /**
+     * Set logger instance
+     */
+    setLogger(logger) {
+        this.logger = logger;
     }
     
     /**

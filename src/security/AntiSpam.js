@@ -3,6 +3,9 @@ const configManager = require('../../configManager');
 
 class AntiSpam {
     constructor() {
+        // Logger instance (set externally)
+        this.logger = null;
+        
         this.userMessages = new Map();
         this.spamPatterns = new Map();
         this.warnings = new Map();
@@ -46,6 +49,13 @@ class AntiSpam {
         
         // Start cleanup
         this.startCleanup();
+    }
+    
+    /**
+     * Set logger instance
+     */
+    setLogger(logger) {
+        this.logger = logger;
     }
     
     /**

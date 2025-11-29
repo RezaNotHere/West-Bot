@@ -34,7 +34,7 @@ async function handleSlashCommand(interaction) {
             return;
         }
         try {
-            const mojangData = await utils.getMojangData(username, logger);
+            const mojangData = await utils.getMojangData(username);
             if (!mojangData) {
                 throw new Error("Minecraft account not found.");
             }
@@ -76,7 +76,12 @@ async function handleSlashCommand(interaction) {
             return;
         } catch (error) {
             if (logger) {
-                logger.logCommandError(error, 'mcinfo', interaction);
+                await logger.logError(error, 'mcinfo Command', {
+                    User: `${interaction.user.tag} (${interaction.user.id})`,
+                    Username: username,
+                    Guild: interaction.guild?.name || 'DM',
+                    Channel: interaction.channel?.name || 'DM'
+                });
             }
             let msg = "Error fetching information.";
             if (error.code === 'ECONNABORTED') msg = "Request timeout.";
@@ -93,7 +98,7 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to use this command.');
         }
         const word = interaction.options.getString('word');
-        utils.addBadWord(word);
+        await utils.addBadWord(word);
         await InteractionUtils.sendSuccess(interaction, `Banned word "${word}" has been added.`);
         return;
     }
@@ -104,7 +109,7 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to use this command.');
         }
         const word = interaction.options.getString('word');
-        utils.removeBadWord(word);
+        await utils.removeBadWord(word);
         await InteractionUtils.sendSuccess(interaction, `Banned word "${word}" has been removed.`);
         return;
     }
@@ -130,7 +135,7 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to use this command.');
         }
         const user = interaction.options.getUser('user');
-        utils.clearWarnings(user.id);
+        await utils.clearWarnings(user.id);
         await InteractionUtils.sendSuccess(interaction, `Warnings for ${user.tag} have been cleared.`);
         return;
     }
@@ -230,7 +235,14 @@ async function handleSlashCommand(interaction) {
             return;
         } catch (error) {
             if (logger) {
-                logger.logCommandError(error, 'start-giveaway', interaction);
+                await logger.logError(error, 'start-giveaway Command', {
+                    User: `${interaction.user.tag} (${interaction.user.id})`,
+                    Channel: channel?.name || 'N/A',
+                    Prize: prize,
+                    Winners: winners,
+                    Duration: durationStr,
+                    Guild: interaction.guild?.name || 'DM'
+                });
             }
             await InteractionUtils.sendError(interaction, 'Error creating giveaway.', true);
             return;
@@ -298,35 +310,6 @@ async function handleSlashCommand(interaction) {
             .setTimestamp();
         await channel.send({ embeds: [rerollEmbed] });
         await interaction.reply({ content: 'New winners have been selected.', ephemeral: true });
-        return;
-    }
-
-    // --- Join Giveaway (Button Interaction) ---
-    if (interaction.customId === 'join_giveaway') {
-        const giveaway = db.giveaways.find(g => g.channelId === interaction.channel.id && !g.ended);
-        if (!giveaway) {
-            return await InteractionUtils.sendError(interaction, 'Active giveaway not found.');
-        }
-        if (!giveaway.participants) giveaway.participants = [];
-        if (giveaway.participants.includes(interaction.user.id)) {
-            return await InteractionUtils.sendError(interaction, 'You have already joined this giveaway.');
-        }
-        giveaway.participants.push(interaction.user.id);
-        db.giveaways.set(interaction.message.id, giveaway);
-
-        const msg = await interaction.channel.messages.fetch(interaction.message.id).catch(() => null);
-        if (msg && msg.embeds && msg.embeds[0]) {
-            const oldEmbed = msg.embeds[0];
-            let newDesc = oldEmbed.description || '';
-            if (newDesc.includes('👥 Participants so far:')) {
-                newDesc = newDesc.replace(/👥 Participants so far: \*\*\d+ people\*\*/, `👥 Participants so far: **${giveaway.participants.length} people**`);
-            } else {
-                newDesc += `\n\n👥 Participants so far: **${giveaway.participants.length} people**`;
-            }
-            const newEmbed = EmbedBuilder.from(oldEmbed).setDescription(newDesc);
-            await msg.edit({ embeds: [newEmbed], components: msg.components });
-        }
-        await InteractionUtils.sendSuccess(interaction, 'You have successfully joined the giveaway! Good luck! 🎉');
         return;
     }
 
@@ -486,10 +469,8 @@ async function handleSlashCommand(interaction) {
                 return await InteractionUtils.sendError(interaction, 'You cannot warn administrators or moderators.');
             }
 
-            const currentWarnings = db.warnings.get(targetUser.id) || 0;
-            const newWarningCount = currentWarnings + 1;
-            
-            db.warnings.set(targetUser.id, newWarningCount);
+            // Use utils.addWarning to maintain consistency (stores as array, returns count)
+            const newWarningCount = await utils.addWarning(targetUser.id, reason, interaction.user);
 
             const dmSent = await utils.sendWarningDM(member, newWarningCount, maxWarnings, reason, interaction.user);
 
@@ -529,11 +510,28 @@ async function handleSlashCommand(interaction) {
                 } else {
                     responseEmbed.addFields({ name: '⚠️ Warning', value: 'User has reached maximum warnings but cannot be banned. Please handle manually.', inline: false });
                     await utils.logAction(interaction.guild, `⚠️ ${targetUser.tag} reached ${maxWarnings} warnings but cannot be banned`);
+                    if (logger) {
+                        await logger.logWarn('User Reached Max Warnings (Cannot Ban)', {
+                            User: `${targetUser.tag} (${targetUser.id})`,
+                            Warnings: maxWarnings,
+                            Reason: 'User cannot be banned (permissions)',
+                            Guild: `${interaction.guild.name} (${interaction.guild.id})`
+                        }, 'Moderation');
+                    }
                 }
             }
 
             await interaction.reply({ embeds: [responseEmbed] });
             await utils.logAction(interaction.guild, `⚠️ ${interaction.user.tag} warned ${targetUser.tag}: ${reason} (${newWarningCount}/${maxWarnings})`);
+            
+            if (logger) {
+                await logger.logModeration('User Warned', interaction.user, targetUser, {
+                    Reason: reason,
+                    WarningCount: `${newWarningCount}/${maxWarnings}`,
+                    DMSent: dmSent ? 'Yes' : 'No',
+                    Guild: `${interaction.guild.name} (${interaction.guild.id})`
+                });
+            }
 
         } catch (error) {
             console.error('Error in warn command:', error);
@@ -600,6 +598,15 @@ async function handleSlashCommand(interaction) {
 
             await interaction.editReply({ embeds: [successEmbed] });
             await utils.logAction(interaction.guild, `🗑️ ${interaction.user.tag} cleared ${deleted.size} message${targetUser ? ` from ${targetUser.tag}` : ''} in ${interaction.channel.name}.`);
+            
+            if (logger) {
+                await logger.logModeration('Messages Cleared', interaction.user, 
+                    targetUser || { tag: 'All Users', id: '0' }, {
+                    Count: deleted.size,
+                    Channel: `${interaction.channel.name} (${interaction.channel.id})`,
+                    Guild: `${interaction.guild.name} (${interaction.guild.id})`
+                });
+            }
             
         } catch (error) {
             console.error('Clear command error:', error);
@@ -698,6 +705,13 @@ async function handleSlashCommand(interaction) {
             await interaction.editReply({ embeds: [successEmbed] });
             await utils.logAction(interaction.guild, `🚪 ${targetUser.tag} was kicked by ${interaction.user.tag}. Reason: ${reason}`);
             
+            if (logger) {
+                await logger.logModeration('User Kicked', interaction.user, targetUser, {
+                    Reason: reason,
+                    Guild: `${interaction.guild.name} (${interaction.guild.id})`
+                });
+            }
+            
         } catch (error) {
             console.error('Kick command error:', error);
             const errorEmbed = new EmbedBuilder()
@@ -755,6 +769,14 @@ async function handleSlashCommand(interaction) {
             await interaction.editReply({ embeds: [successEmbed] });
             await utils.logAction(interaction.guild, `🔨 ${targetUser.tag} was banned by ${interaction.user.tag}. Reason: ${reason}`);
             
+            if (logger) {
+                await logger.logModeration('User Banned', interaction.user, targetUser, {
+                    Reason: reason,
+                    DeleteDays: deleteDays,
+                    Guild: `${interaction.guild.name} (${interaction.guild.id})`
+                });
+            }
+            
         } catch (error) {
             console.error('Ban command error:', error);
             const errorEmbed = new EmbedBuilder()
@@ -797,6 +819,13 @@ async function handleSlashCommand(interaction) {
 
             await interaction.editReply({ embeds: [successEmbed] });
             await utils.logAction(interaction.guild, `✅ ${bannedUser.user.tag} was unbanned by ${interaction.user.tag}. Reason: ${reason}`);
+            
+            if (logger) {
+                await logger.logModeration('User Unbanned', interaction.user, bannedUser.user, {
+                    Reason: reason,
+                    Guild: `${interaction.guild.name} (${interaction.guild.id})`
+                });
+            }
             
         } catch (error) {
             console.error('Unban command error:', error);
@@ -948,19 +977,24 @@ async function handleTextCommand(message, commandName, args) {
 
         // Log the command attempt
         if (logger) {
-            logger.logCommandError(new Error(`Text command not found: ${commandName}`), 'text_command', {
-                command: commandName,
-                args: args,
-                user: message.author.tag
-            });
+            await logger.logWarn('Text Command Not Found', {
+                Command: commandName,
+                Args: args.join(' '),
+                User: `${message.author.tag} (${message.author.id})`,
+                Channel: `${message.channel.name} (${message.channel.id})`,
+                Guild: `${message.guild?.name} (${message.guild?.id})` || 'DM'
+            }, 'Command');
         }
 
     } catch (error) {
         console.error('Error handling text command:', error);
         if (logger) {
-            logger.logCommandError(error, 'text_command', {
-                command: commandName,
-                args: args
+            await logger.logError(error, 'Text Command Handler', {
+                Command: commandName,
+                Args: args.join(' '),
+                User: `${message.author.tag} (${message.author.id})`,
+                Channel: `${message.channel.name} (${message.channel.id})`,
+                Guild: `${message.guild?.name} (${message.guild?.id})` || 'DM'
             });
         }
 

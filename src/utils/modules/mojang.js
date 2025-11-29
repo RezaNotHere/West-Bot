@@ -1,10 +1,11 @@
 const axios = require('axios');
-const LRU = require('lru-cache');
+const { LRUCache } = require('lru-cache');
+const { getCapeTypeName } = require('./cosmetics');
 
 // Configure cache with size limits and max age
-const cache = new LRU({
+const cache = new LRUCache({
     max: 500, // Maximum number of items
-    maxAge: 5 * 60 * 1000, // Items expire after 5 minutes
+    ttl: 5 * 60 * 1000, // Items expire after 5 minutes (ttl instead of maxAge in newer versions)
     updateAgeOnGet: true // Reset timer when item is accessed
 });
 

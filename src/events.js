@@ -4,6 +4,9 @@ const utils = require('./utils');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../configManager');
 
+let logger = null;
+const setLogger = (l) => { logger = l; }
+
 async function onMessageCreate(message, client, env) {
     // Skip bot messages
     if (message.author.bot) return;
@@ -14,7 +17,7 @@ async function onMessageCreate(message, client, env) {
             await message.delete();
         } catch {}
         // Warn user
-        const warnCount = utils.addWarning(message.author.id);
+        const warnCount = await utils.addWarning(message.author.id);
         try {
             await message.author.send({
                 embeds: [
@@ -30,6 +33,17 @@ async function onMessageCreate(message, client, env) {
         } catch {}
         // Log
         await utils.logAction(message.guild, `🚫 Message containing banned word deleted from ${message.author.tag}. (${warnCount}/3 warnings)`);
+        
+        if (logger) {
+            await logger.logWarn('Banned Word Detected', {
+                User: `${message.author.tag} (${message.author.id})`,
+                Channel: `${message.channel.name} (${message.channel.id})`,
+                Guild: `${message.guild.name} (${message.guild.id})`,
+                WarningCount: `${warnCount}/3`,
+                Content: message.content.substring(0, 100)
+            }, 'Moderation');
+        }
+        
         // Ban after 3 warnings
         if (warnCount >= 3) {
             try {
@@ -47,6 +61,14 @@ async function onMessageCreate(message, client, env) {
                 await message.member.ban({ reason: 'Received 3 warnings for repeated use of banned words' });
                 utils.clearWarnings(message.author.id);
                 await utils.logAction(message.guild, `⛔️ ${message.author.tag} banned for receiving 3 warnings.`);
+                
+                if (logger) {
+                    await logger.logModeration('User Auto-Banned (3 Warnings)', 
+                        { tag: 'System', id: '0' }, message.author, {
+                        Reason: 'Received 3 warnings for banned words',
+                        Guild: `${message.guild.name} (${message.guild.id})`
+                    });
+                }
             } catch {}
         }
         return;
@@ -73,6 +95,15 @@ async function onGuildMemberAdd(member, client, env) {
     }
     try {
         await utils.logAction(member.guild, `👋 ${member.user.tag} joined the server.`);
+        
+        if (logger) {
+            await logger.logInfo('Member Joined', {
+                User: `${member.user.tag} (${member.user.id})`,
+                Guild: `${member.guild.name} (${member.guild.id})`,
+                AccountAge: `${Math.floor((Date.now() - member.user.createdTimestamp) / 86400000)} days`,
+                MemberCount: member.guild.memberCount
+            }, 'Guild Event');
+        }
     } catch (e) {
         console.error('Error logging member join:', e);
     }
@@ -93,6 +124,14 @@ async function onGuildMemberRemove(member, client, env) {
     
     try {
         await utils.logAction(member.guild, `👋 ${member.user.tag} left the server.`);
+        
+        if (logger) {
+            await logger.logInfo('Member Left', {
+                User: `${member.user.tag} (${member.user.id})`,
+                Guild: `${member.guild.name} (${member.guild.id})`,
+                MemberCount: member.guild.memberCount
+            }, 'Guild Event');
+        }
     } catch (e) {
         console.error('Error logging member leave:', e);
     }
@@ -148,6 +187,14 @@ async function onGuildBanAdd(ban, client, env) {
     // Log the ban action
     try {
         await utils.logAction(guild, `⛔️ ${user.tag} was banned from the server.`);
+        
+        if (logger) {
+            await logger.logModeration('User Banned', 
+                { tag: 'System', id: '0' }, user, {
+                Guild: `${guild.name} (${guild.id})`,
+                Reason: ban.reason || 'No reason provided'
+            });
+        }
     } catch (logError) {
         console.error('Failed to log ban:', logError);
     }
@@ -159,5 +206,6 @@ module.exports = {
     onGuildMemberRemove,
     onReady,
     onInteractionCreate,
-    onGuildBanAdd
+    onGuildBanAdd,
+    setLogger
 };
