@@ -743,49 +743,6 @@ async function handleButton(interaction, client, env) {
 
 // --- handleSelectMenu ---
 async function handleSelectMenu(interaction, client, env) {
-    if (interaction.customId === 'select_capes') {
-        // فقط ادمین یا نقش خاص اجازه دارد
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return await interaction.reply({ content: 'You do not have permission to use this menu.', flags: MessageFlags.Ephemeral });
-        }
-        try {
-            await interaction.deferReply();
-            const username = interaction.message.embeds[0]?.fields?.find(f => f.name.includes('نام کاربری'))?.value?.replace(/[`>\s]/g, '') || 'Unknown';
-            let uuid = null;
-            try {
-                const mojangData = await utils.getMojangData(username);
-                uuid = mojangData?.id;
-            } catch (err) {
-                console.error('Error fetching Mojang data:', err);
-            }
-            if (!uuid) {
-                return await interaction.editReply({ content: '❌ خطا در دریافت uuid کاربر.', ephemeral: false });
-            }
-            const selectedCapes = interaction.values;
-            let hypixelStats = {};
-            try {
-                hypixelStats = await utils.getHypixelData(uuid, config.apis.hypixel);
-            } catch (err) {
-                console.warn('Error fetching Hypixel stats:', err);
-            }
-            try {
-                const buffer = await utils.createProfileImage({ uuid, username, capeUrls: selectedCapes });
-                await interaction.editReply({
-                    content: `تصویر پروفایل با کیپ‌های انتخابی برای ${username}:`,
-                    files: [{ attachment: buffer, name: 'profile.png' }],
-                    embeds: [],
-                    components: []
-                });
-            } catch (imgErr) {
-                console.error('Error creating profile image:', imgErr);
-                await interaction.editReply({ content: '❌ خطا در ساخت تصویر پروفایل.', ephemeral: false });
-            }
-        } catch (e) {
-            console.error('Error in select_capes handler:', e);
-            await interaction.editReply({ content: '❌ خطا در ساخت تصویر پروفایل.', ephemeral: false });
-        }
-        return;
-    }
     const { customId, values, user, guild } = interaction;
     const REVIEW_CHANNEL_ID = config.channels.review;
     const BUYER_ROLE_ID = config.roles.buyer;

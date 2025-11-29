@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, MessageFlags } = require('discord.js');
 
 class InteractionUtils {
     /**
@@ -14,7 +14,7 @@ class InteractionUtils {
             .setDescription(`**${message}**\n\n> لطفاً دوباره تلاش کنید یا با پشتیبانی ارتباط بگیرید.`)
             .setFooter({ text: 'در صورت تکرار مشکل، به ادمین اطلاع دهید.' });
 
-        const options = { embeds: [errorEmbed], ephemeral: true };
+        const options = { embeds: [errorEmbed], flags: MessageFlags.Ephemeral };
 
         try {
             if (edit && interaction.deferred) {
@@ -39,7 +39,7 @@ class InteractionUtils {
             .setColor('Green')
             .setDescription(`✅ ${message}`);
         
-        const options = { embeds: [successEmbed], ephemeral };
+        const options = { embeds: [successEmbed], flags: ephemeral ? MessageFlags.Ephemeral : undefined };
         
         try {
             if (edit && interaction.deferred) {
@@ -59,7 +59,7 @@ class InteractionUtils {
      */
     static async deferReply(interaction, ephemeral = false) {
         try {
-            await interaction.deferReply({ ephemeral });
+            await interaction.deferReply({ flags: ephemeral ? MessageFlags.Ephemeral : undefined });
         } catch (error) {
             console.error('Failed to defer reply:', error);
         }

@@ -1,5 +1,6 @@
 // index.js
 // 🔧 All configuration is now in config.json (loaded via configManager.js) - NO .env file needed!
+console.log('[DEBUG] index.js started');
 const { Client, GatewayIntentBits, Partials, Events, ActivityType } = require('discord.js');
 const config = require('./configManager');
 const { db, dbManager } = require('./src/database');
@@ -8,7 +9,7 @@ const commands = require('./src/commands');
 const events = require('./src/events');
 const handlers = require('./src/handlers');
 const LoggerUtils = require('./src/utils/LoggerUtils');
-const SecurityManager = require('./src/security/SecurityManager');
+const EnhancedSecurityManager = require('./src/security/EnhancedSecurityManager');
 const commandLogger = require('./src/commandLogger');
 
 // ✅ Validate configuration before starting
@@ -21,11 +22,10 @@ const logger = new LoggerUtils({
     debug: config.server.environment !== 'production'
 });
 
-// Initialize Security System
-const security = new SecurityManager({
-    adminIds: []
+// Initialize optimized security manager
+const securityManager = new OptimizedSecurityManager({
+    adminIds: config.security?.adminIds || []
 });
-security.setLogger(logger);
 console.log('🛡️ Security System Initialized');
 
 // Print configuration (only in debug mode)
@@ -56,38 +56,6 @@ module.exports.setModuleDependencies = (d) => {
     d.config = config;
 };
 
-// Set logger and security for commands and handlers
-commands.setLogger(logger);
-commands.setSecurity(security);
-handlers.setLogger(logger);
-handlers.setSecurity(security);
-handlers.setConfig(config);
-events.setLogger(logger);
-
-const commandLogger_ins = new (require('./src/commandLogger'))();
-
-// Event: Ready
-client.once(Events.ClientReady, async () => {
-    console.log(`✨ Logged in as ${client.user.tag}`);
-    console.log(`🤖 Bot is ready!`);
-    
-    // Set client for logger to enable channel logging
-    logger.setClient(client);
-    
-    // Log bot ready
-    await logger.logSuccess('Bot Started', {
-        Bot: `${client.user.tag} (${client.user.id})`,
-        Guilds: client.guilds.cache.size,
-        Users: client.users.cache.size,
-        Channels: client.channels.cache.size
-    }, 'Bot Status');
-    
-    // Update bot status
-    updateBotStatus();
-    // Update status every hour
-    setInterval(updateBotStatus, 3600000);
-});
-
 function updateBotStatus() {
     const activities = config.bot.status.activities || [];
     if (activities.length > 0) {
@@ -105,46 +73,77 @@ function updateBotStatus() {
     }
 }
 
-// Event: Interaction (Slash Commands)
+// Set up modules with enhanced security
+utils.setClient(client);
+utils.setLogger(logger);
+commands.setLogger(logger);
+commands.setSecurity(securityManager);
+handlers.setLogger(logger);
+handlers.setSecurity(securityManager);
+handlers.setConfig(config);
+events.setLogger(logger);
+
+const commandLogger_ins = new (require('./src/commandLogger'))();
+
+// Event: Ready
+client.once(Events.ClientReady, async () => {
+    console.log(`✨ Logged in as ${client.user.tag}`);
+    console.log(`🤖 Bot is ready!`);
+    
+    // Set client for logger to enable channel logging
+    logger.setClient(client);
+    
+    // Set client for utils and start giveaway checker
+    const utils = require('./src/utils');
+    utils.setClient(client);
+    utils.checkGiveaways();
+    
+    // Check giveaways every 3 seconds
+    setInterval(() => {
+        utils.checkGiveaways();
+    }, 3000);
+    
+    // Log bot ready
+    await logger.logSuccess('Bot Started', {
+        Bot: `${client.user.tag} (${client.user.id})`,
+        Guilds: client.guilds.cache.size,
+        Users: client.users.cache.size,
+        Channels: client.channels.cache.size
+    }, 'Bot Status');
+    
+    // Update bot status
+    updateBotStatus();
+    // Update status every hour
+    setInterval(updateBotStatus, 3600000);
+});
+
+// Event: Interaction (Slash Commands) with enhanced security
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
-        // Security check
-        const securityCheck = await security.checkInteraction(interaction);
+        // Enhanced security check
+        const securityCheck = await securityManager.checkInteractionSecurity(interaction);
         if (!securityCheck.allowed) {
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp({ 
-                    content: securityCheck.message || '⏱️ Rate limit exceeded. Please wait.',
-                    ephemeral: true 
-                }).catch(() => {});
+                    content: securityCheck.message || 'Access denied',
+                    flags: MessageFlags.Ephemeral
+                });
             } else {
-                await interaction.reply({ 
-                    content: securityCheck.message || '⏱️ Rate limit exceeded. Please wait.',
-                    ephemeral: true 
-                }).catch(() => {});
+                await InteractionUtils.sendError(interaction, securityCheck.message || 'Access denied', false);
             }
             return;
         }
-        
-        // Log interaction
-        // await logger.logCommand(interaction); // Disabled to prevent duplicate logs
-        
-        if (interaction.isCommand()) {
+
+        // Handle different interaction types
+        if (interaction.isChatInputCommand()) {
+            await commandLogger_ins.logCommand(interaction);
             await commands.handleSlashCommand(interaction);
-            commandLogger_ins.logCommand(interaction);
+        } else if (interaction.isButton()) {
+            await handlers.handleButton(interaction, client, config);
         } else if (interaction.isStringSelectMenu()) {
             await handlers.handleSelectMenu(interaction, client);
-            // Select menu logging handled by commandLogger
-        } else if (interaction.isButton()) {
-            await handlers.handleButton(interaction, client);
-            await logger.logInfo('Button Interaction', {
-                User: `${interaction.user.tag} (${interaction.user.id})`,
-                Button: interaction.customId,
-                Channel: interaction.channel?.name || 'DM',
-                Guild: interaction.guild?.name || 'DM'
-            }, 'Button');
         } else if (interaction.isModalSubmit()) {
-            await handlers.handleModal(interaction);
-            // Modal logging handled by commandLogger
+            await handlers.handleModalSubmit(interaction, client);
         }
     } catch (error) {
         await logger.logError(error, 'Interaction Handler', {

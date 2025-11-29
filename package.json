@@ -1,6 +1,6 @@
 {
   "name": "west-bot",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Advanced Discord bot with professional ticket system, moderation, giveaways, and Minecraft integration",
   "main": "index.js",
   "scripts": {

@@ -1,5 +1,5 @@
 // commands.js
-// Slash command and message command handlers
+// Slash command and message command handlers with enhanced security
 const { 
     EmbedBuilder, 
     ButtonBuilder, 
@@ -8,7 +8,8 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    ActionRowBuilder
+    ActionRowBuilder,
+    MessageFlags
 } = require('discord.js');
 
 const { db } = require('./database');
@@ -16,78 +17,88 @@ const utils = require('./utils');
 const InteractionUtils = require('./utils/InteractionUtils');
 const config = require('../configManager');
 const { ValidationError, PermissionError } = require('./errors/BotError');
+const InputValidator = require('./security/InputValidator');
 
 let logger = null;
 let security = null;
+let inputValidator = null;
 
-const setLogger = (l) => { logger = l; }
-const setSecurity = (s) => { security = s; }
+const setLogger = (l) => { 
+    logger = l; 
+    if (inputValidator) inputValidator.setLogger(l);
+}
+
+const setSecurity = (s) => { 
+    security = s; 
+    // Initialize input validator
+    inputValidator = new InputValidator();
+    if (logger) inputValidator.setLogger(logger);
+}
 
 async function handleSlashCommand(interaction) {
     // --- /mcinfo ---
     if (interaction.commandName === 'mcinfo') {
-        await InteractionUtils.deferReply(interaction, true);
+        await InteractionUtils.deferReply(interaction, false);
         const username = interaction.options.getString("username")?.trim();
+        
+        // Enhanced input validation
+        if (!username) {
+            return await InteractionUtils.sendError(interaction, "Username is required.", false);
+        }
+        
+        // Validate username format
+        const usernameValidation = inputValidator.validate(username, 'minecraftUsername');
+        if (!usernameValidation.valid) {
+            return await InteractionUtils.sendError(
+                interaction, 
+                `Invalid username format: ${usernameValidation.errors.join(', ')}`, 
+                false
+            );
+        }
+        
+        // Use sanitized username
+        const sanitizedUsername = usernameValidation.sanitized;
+        
         // Validate config variables
         if (!config.apis || !config.apis.mojang) {
-            await InteractionUtils.sendError(interaction, "Mojang API key is not configured.", true);
+            await InteractionUtils.sendError(interaction, "Mojang API key is not configured.", false);
             return;
         }
+        
         try {
-            const mojangData = await utils.getMojangData(username);
+            const mojangData = await utils.getMojangData(sanitizedUsername);
             if (!mojangData) {
                 throw new Error("Minecraft account not found.");
             }
-            // Centralized cape list
-            const minecraftCapes = [
-                { label: 'Migrator Cape', value: 'migrator' },
-                { label: 'Vanilla Cape', value: 'vanilla' },
-                { label: 'Pan Cape', value: 'pan' },
-                { label: 'Common Cape', value: 'common' },
-                { label: 'MineCon 2011 Cape', value: 'minecon2011' },
-                { label: 'MineCon 2012 Cape', value: 'minecon2012' },
-                { label: 'MineCon 2013 Cape', value: 'minecon2013' },
-                { label: 'MineCon 2015 Cape', value: 'minecon2015' },
-                { label: 'MineCon 2016 Cape', value: 'minecon2016' },
-                { label: 'Mojang Cape (Old)', value: 'mojangOld' },
-                { label: 'Mojang Studios Cape', value: 'mojangStudios' },
-                { label: 'Translator Cape', value: 'translator' },
-                { label: 'Mojira Moderator Cape', value: 'mojiraMod' },
-                { label: 'Cobalt Cape', value: 'cobalt' }
-            ];
-            const capeEmbed = new EmbedBuilder()
-                .setColor(0x00b894)
-                .setTitle('🎮 Select Account Capes')
-                .setDescription('Please select the desired capes. After selection, the profile image will be created with those capes.')
-                .setFooter({ text: 'Minecraft Cape Selector'})
-                .setTimestamp();
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId('select_capes')
-                .setPlaceholder('Select Capes (Multiple selection allowed)')
-                .setMinValues(0)
-                .setMaxValues(minecraftCapes.length)
-                .addOptions(minecraftCapes);
-            const row = new ActionRowBuilder().addComponents(selectMenu);
-            await interaction.editReply({
-                embeds: [capeEmbed],
-                components: [row],
-                ephemeral: true
-            });
+            
+            // Additional validation for UUID
+            const uuidValidation = inputValidator.validate(mojangData.id, 'discordId');
+            if (!uuidValidation.valid) {
+                throw new Error("Invalid UUID format received from Mojang API.");
+            }
+            
+            // Generate profile image with validated data
+            await utils.sendProfileImageEmbed(interaction, mojangData.id, [], {});
             return;
         } catch (error) {
             if (logger) {
                 await logger.logError(error, 'mcinfo Command', {
                     User: `${interaction.user.tag} (${interaction.user.id})`,
-                    Username: username,
+                    Username: sanitizedUsername,
+                    OriginalUsername: username,
                     Guild: interaction.guild?.name || 'DM',
-                    Channel: interaction.channel?.name || 'DM'
+                    Channel: interaction.channel?.name || 'DM',
+                    ValidationErrors: usernameValidation.errors || []
                 });
             }
+            
             let msg = "Error fetching information.";
             if (error.code === 'ECONNABORTED') msg = "Request timeout.";
             else if (error.response?.status === 429) msg = "Too many requests.";
             else if (error.response?.status === 403) msg = "Invalid API key.";
-            await InteractionUtils.sendError(interaction, msg, true);
+            else if (error.message.includes('Invalid username')) msg = "Invalid Minecraft username format.";
+            
+            await InteractionUtils.sendError(interaction, msg, false);
             return;
         }
     }
@@ -97,9 +108,35 @@ async function handleSlashCommand(interaction) {
         if (!interaction.member.permissions.has('Administrator')) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to use this command.');
         }
+        
         const word = interaction.options.getString('word');
-        await utils.addBadWord(word);
-        await InteractionUtils.sendSuccess(interaction, `Banned word "${word}" has been added.`);
+        
+        // Input validation
+        if (!word || word.trim().length === 0) {
+            return await InteractionUtils.sendError(interaction, 'Word cannot be empty.', true);
+        }
+        
+        const wordValidation = inputValidator.validate(word, 'safeText', { maxLength: 50 });
+        if (!wordValidation.valid) {
+            return await InteractionUtils.sendError(
+                interaction, 
+                `Invalid word format: ${wordValidation.errors.join(', ')}`, 
+                true
+            );
+        }
+        
+        const sanitizedWord = wordValidation.sanitized.toLowerCase();
+        
+        try {
+            const success = await utils.addBadWord(sanitizedWord);
+            if (success) {
+                await InteractionUtils.sendSuccess(interaction, `Banned word "${sanitizedWord}" has been added.`);
+            } else {
+                await InteractionUtils.sendError(interaction, 'This word is already banned.', true);
+            }
+        } catch (error) {
+            await InteractionUtils.sendError(interaction, 'Error adding banned word.', true);
+        }
         return;
     }
 
@@ -108,9 +145,35 @@ async function handleSlashCommand(interaction) {
         if (!interaction.member.permissions.has('Administrator')) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to use this command.');
         }
+        
         const word = interaction.options.getString('word');
-        await utils.removeBadWord(word);
-        await InteractionUtils.sendSuccess(interaction, `Banned word "${word}" has been removed.`);
+        
+        // Input validation
+        if (!word || word.trim().length === 0) {
+            return await InteractionUtils.sendError(interaction, 'Word cannot be empty.', true);
+        }
+        
+        const wordValidation = inputValidator.validate(word, 'safeText', { maxLength: 50 });
+        if (!wordValidation.valid) {
+            return await InteractionUtils.sendError(
+                interaction, 
+                `Invalid word format: ${wordValidation.errors.join(', ')}`, 
+                true
+            );
+        }
+        
+        const sanitizedWord = wordValidation.sanitized.toLowerCase();
+        
+        try {
+            const success = await utils.removeBadWord(sanitizedWord);
+            if (success) {
+                await InteractionUtils.sendSuccess(interaction, `Banned word "${sanitizedWord}" has been removed.`);
+            } else {
+                await InteractionUtils.sendError(interaction, 'This word is not in the banned list.', true);
+            }
+        } catch (error) {
+            await InteractionUtils.sendError(interaction, 'Error removing banned word.', true);
+        }
         return;
     }
 
@@ -125,7 +188,7 @@ async function handleSlashCommand(interaction) {
             .setTitle('📝 List of Banned Words')
             .setDescription(list.length ? list.join(', ') : 'List is empty.')
             .setTimestamp();
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -168,7 +231,6 @@ async function handleSlashCommand(interaction) {
                 .setTimestamp();
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            console.error('Invites details error:', error);
             await InteractionUtils.sendError(interaction, 'خطا در دریافت اطلاعات دعوت‌ها.', true);
         }
         return;
@@ -176,7 +238,13 @@ async function handleSlashCommand(interaction) {
 
     // --- /start-giveaway ---
     if (interaction.commandName === 'start-giveaway') {
+        const channel = interaction.options.getChannel('channel');
+        const durationStr = interaction.options.getString('duration');
+        const winners = interaction.options.getInteger('winners');
+        const prize = interaction.options.getString('prize');
+        
         try {
+            // Permission check
             if (!interaction.member.permissions.has('ManageMessages')) {
                 throw new PermissionError(
                     'You do not have permission to host giveaways.',
@@ -184,67 +252,89 @@ async function handleSlashCommand(interaction) {
                 );
             }
 
-            const channel = interaction.options.getChannel('channel');
-            const durationStr = interaction.options.getString('duration');
-            const winners = interaction.options.getInteger('winners');
-            const prize = interaction.options.getString('prize');
+            // Enhanced input validation
+            const validationResults = {
+                prize: inputValidator.validate(prize, 'safeText', { maxLength: 100 }),
+                duration: inputValidator.validate(durationStr, 'duration'),
+                winners: inputValidator.validate(winners.toString(), 'numbers')
+            };
 
-            if (!/^\d+[smhd]$/.test(durationStr)) {
-                throw new ValidationError(
-                    'Invalid duration format. Example: 1h or 30m or 2d',
-                    'duration'
+            // Check validation results
+            const validationErrors = [];
+            Object.entries(validationResults).forEach(([field, result]) => {
+                if (!result.valid) {
+                    validationErrors.push(`${field}: ${result.errors.join(', ')}`);
+                }
+            });
+
+            if (validationErrors.length > 0) {
+                return await InteractionUtils.sendError(
+                    interaction, 
+                    `Validation errors: ${validationErrors.join('; ')}`, 
+                    true
                 );
             }
 
-            if (winners < 1) {
-                throw new ValidationError(
-                    'Number of winners must be at least 1.',
-                    'winners'
-                );
+            // Use sanitized values
+            const sanitizedPrize = validationResults.prize.sanitized;
+            const sanitizedDuration = validationResults.duration.sanitized;
+            const sanitizedWinners = parseInt(validationResults.winners.sanitized);
+
+            // Additional business logic validation
+            if (sanitizedWinners < 1 || sanitizedWinners > 10) {
+                return await InteractionUtils.sendError(interaction, "Number of winners must be between 1 and 10.", true);
             }
 
             const ms = utils.ms;
-            const durationMs = ms(durationStr);
+            const durationMs = ms(sanitizedDuration);
             
-            if (!durationMs || durationMs < 10000) {
-                return await InteractionUtils.sendError(interaction, 'Duration must be at least 10 seconds.');
+            if (!durationMs || durationMs < 30000) {
+                return await InteractionUtils.sendError(interaction, "Duration must be at least 30 seconds.", true);
             }
+
+            if (durationMs > 7 * 24 * 60 * 60 * 1000) { // Max 7 days
+                return await InteractionUtils.sendError(interaction, "Duration cannot exceed 7 days.", true);
+            }
+
             const endTime = Date.now() + durationMs;
             const embed = new EmbedBuilder()
                 .setColor('#FFD700')
-                .setTitle('🎉 Server Giveaway!')
-                .setDescription(`Click 🎉 to join the giveaway!\n\n**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime/1000)}:R>\n👤 Host: <@${interaction.user.id}>\n\n👥 Participants so far: **0 people**`)
-                .setFooter({ text: 'Click the button below to join the giveaway.' })
+                .setTitle('🎉 گیوای سرور!')
+                .setDescription(`بر شرکت در گیوای روی 🎉 کلیک کنید!\n\n**جایزه:** ${sanitizedPrize}\n**برندگان:** ${sanitizedWinners}\n**پایان:** <t:${Math.floor(endTime/1000)}:R>\n👤 میزبان: <@${interaction.user.id}>\n\n👥 شرکت‌کننده تا این لحظه: **0 نفر**`)
+                .setFooter({ text: 'بر شرکت در گیوای روی دکمه زیر کلیک کنید.' })
                 .setTimestamp();
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('join_giveaway').setLabel('Join Giveaway').setStyle(ButtonStyle.Success).setEmoji('🎉')
+                new ButtonBuilder().setCustomId('join_giveaway').setLabel('شرکت در گیوای').setStyle(ButtonStyle.Success).setEmoji('🎉')
             );
             const msg = await channel.send({ embeds: [embed], components: [row] });
             
-            db.giveaways.set(msg.id, {
+            const giveawayData = {
                 channelId: channel.id,
-                prize,
-                winnerCount: winners,
+                prize: sanitizedPrize,
+                winnerCount: sanitizedWinners,
                 endTime,
                 ended: false,
                 participants: [],
                 host: interaction.user.id
-            });
-            await interaction.reply({ content: `Giveaway created successfully! [View](${msg.url})`, ephemeral: true });
-            require('./utils').checkGiveaways();
+            };
+            
+            db.giveaways.set(msg.id, giveawayData);
+            
+            await interaction.reply({ content: `Giveaway created successfully! [View](${msg.url})`, flags: MessageFlags.Ephemeral });
+            utils.checkGiveaways();
             return;
         } catch (error) {
             if (logger) {
                 await logger.logError(error, 'start-giveaway Command', {
                     User: `${interaction.user.tag} (${interaction.user.id})`,
-                    Channel: channel?.name || 'N/A',
+                    Channel: interaction.channel?.name || 'N/A',
                     Prize: prize,
                     Winners: winners,
                     Duration: durationStr,
                     Guild: interaction.guild?.name || 'DM'
                 });
             }
-            await InteractionUtils.sendError(interaction, 'Error creating giveaway.', true);
+            await InteractionUtils.sendError(interaction, 'خطای در ایجاد گیوای.', true);
             return;
         }
     }
@@ -309,7 +399,7 @@ async function handleSlashCommand(interaction) {
             .setDescription(`New winners:\n${winners.map(w => `<@${w}>`).join(', ')}`)
             .setTimestamp();
         await channel.send({ embeds: [rerollEmbed] });
-        await interaction.reply({ content: 'New winners have been selected.', ephemeral: true });
+        await interaction.reply({ content: 'New winners have been selected.', flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -343,7 +433,6 @@ async function handleSlashCommand(interaction) {
             }
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            console.error('Role stats error:', error);
             await InteractionUtils.sendError(interaction, 'خطا در دریافت آمار رول‌ها.', true);
         }
         return;
@@ -385,7 +474,6 @@ async function handleSlashCommand(interaction) {
             }
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            console.error('Invites leaderboard error:', error);
             await InteractionUtils.sendError(interaction, 'خطا در دریافت اطلاعات دعوت‌ها.', true);
         }
         return;
@@ -416,7 +504,7 @@ async function handleSlashCommand(interaction) {
         try {
             await interaction.reply({ embeds: [embed], components: [row] });
         } catch (error) {
-            console.error(`Error sending sentrolemenu message: ${error.message}`);
+            // Ignore menu send errors
         }
         return;
     }
@@ -539,7 +627,7 @@ async function handleSlashCommand(interaction) {
                 .setColor('Red')
                 .setDescription('❌ Error issuing warning. Please try again.');
             if (!interaction.replied) {
-                await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
         }
         return;
@@ -551,13 +639,13 @@ async function handleSlashCommand(interaction) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setDescription('❌ You do not have permission to clear messages.');
-            return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
 
         const amount = interaction.options.getInteger('amount');
         const targetUser = interaction.options.getUser('user');
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             let messages;
@@ -675,7 +763,7 @@ async function handleSlashCommand(interaction) {
         const targetUser = interaction.options.getUser('user');
         const reason = interaction.options.getString('reason') || 'No reason specified';
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const member = await interaction.guild.members.fetch(targetUser.id);
@@ -732,7 +820,7 @@ async function handleSlashCommand(interaction) {
         const reason = interaction.options.getString('reason') || 'No reason specified';
         const deleteDays = interaction.options.getInteger('deletedays') || 0;
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
@@ -796,7 +884,7 @@ async function handleSlashCommand(interaction) {
         const userId = interaction.options.getString('userid');
         const reason = interaction.options.getString('reason') || 'No reason specified';
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const banList = await interaction.guild.bans.fetch();
