@@ -1,4 +1,4 @@
-# 🤖 Advanced Discord Bot - West Bot
+# 🤖 Advanced Discord Bot - West Bot v2.1.0
 
 <div align="center">
 
@@ -6,12 +6,34 @@
 ![Node.js](https://img.shields.io/badge/Node.js-v16+-green?logo=node.js&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
+![Version](https://img.shields.io/badge/Version-2.1.0-blue)
 
 **A professional, feature-rich Discord bot for advanced server management, ticketing, giveaways, and Minecraft utilities.**
 
 [English](#english) • [فارسی](#فارسی)
 
 </div>
+
+---
+
+## 🆕 What's New in v2.1.0
+
+### ✨ Enhanced Logging System
+- **Professional Discord Channel Logging**: All logs now sent to designated Discord channel with beautiful embeds
+- **Color-Coded Log Levels**: Each log type has distinct color (success=green, error=red, info=blue, warn=yellow)
+- **Smart Webhook Integration**: Only critical errors and security events sent to webhook
+- **Comprehensive Log Coverage**: Commands, tickets, errors, and all bot activities fully logged
+
+### 🎫 Improved Ticket System
+- **Smart Button Management**: Delete and transcript buttons only appear on closed tickets
+- **Clean Open Ticket Interface**: Open tickets show only relevant actions
+- **Enhanced User Experience**: Streamlined ticket workflow with proper button states
+
+### 🔧 Technical Improvements
+- **Fixed Duplicate Logging**: Eliminated redundant log entries
+- **Enhanced Error Handling**: Better error recovery and reporting
+- **Improved Performance**: Optimized logging and interaction handling
+- **Better Module Integration**: Cleaner code structure and dependencies
 
 ---
 
@@ -132,10 +154,11 @@ node index.js
 - **Secure Collections**: Separate encrypted storage for passwords, tokens, etc.
 
 ### 📝 Logging & Monitoring
-- **Webhook Reporting**: Error logs sent to Discord webhook
-- **Command Auditing**: Every interaction logged to designated channel
-- **Structured Errors**: Custom error classes for detailed reporting
-- **Debug Mode**: Configurable logging levels
+- **Professional Discord Channel Logging**: All activities logged to designated channel with color-coded embeds
+- **Smart Webhook Integration**: Critical errors and security events sent to webhook
+- **Command Auditing**: Every interaction logged with full context
+- **Color-Coded Levels**: Success (green), Error (red), Info (blue), Warning (yellow)
+- **Structured Logging**: Clean, organized log format with timestamps and context
 
 ---
 
