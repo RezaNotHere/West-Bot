@@ -61,7 +61,7 @@ handlers.setLogger(logger);
 handlers.setSecurity(security);
 handlers.setConfig(config);
 
-const commandLogger_ins = new (require('./src/commandLogger'))(client, logger);
+const commandLogger_ins = new (require('./src/commandLogger'))();
 
 // Event: Ready
 client.once(Events.ClientReady, () => {
@@ -90,7 +90,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } else if (interaction.isStringSelectMenu()) {
         await handlers.handleSelectMenu(interaction);
     } else if (interaction.isButton()) {
-        await handlers.handleButton(interaction);
+        await handlers.handleButton(interaction, client);
     } else if (interaction.isModalSubmit()) {
         await handlers.handleModal(interaction);
     }

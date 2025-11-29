@@ -1,8 +1,18 @@
 // handlers.js
-const db = require('./database');
+const { db } = require('./database');
 const utils = require('./utils');
+const { logAction } = require('./utils');
+const transcript = require('./utils/transcript');
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const config = require('../configManager');
+
+let logger = null;
+let security = null;
+let configInstance = null;
+
+const setLogger = (l) => { logger = l; }
+const setSecurity = (s) => { security = s; }
+const setConfig = (c) => { configInstance = c; }
 
 // --- handleButton ---
 async function handleButton(interaction, client, env) {
@@ -117,77 +127,98 @@ async function handleButton(interaction, client, env) {
     const BUYER_ROLE_ID = config.roles.buyer;
     const REVIEW_CHANNEL_ID = config.channels.review;
 
-    // Handle "More Details" button
-    if (customId.startsWith('more_details_')) {
-        const reason = customId.replace('more_details_', '');
-        const ticketConfig = config.ticketSystem;
-        const categoryConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
-        
-        if (!categoryConfig) {
-            return interaction.reply({ content: '❌ Category not found.', ephemeral: true });
-        }
-
-        const detailsEmbed = new EmbedBuilder()
-            .setColor(config.colors.info || '#3498DB')
-            .setTitle(`📋 ${categoryConfig.label} - More Details`)
-            .setDescription(categoryConfig.detailedDescription)
-            .addFields(
-                { name: 'Category', value: categoryConfig.label, inline: true },
-                { name: 'Original Description', value: categoryConfig.description, inline: true }
-            )
-            .setTimestamp();
-
-        return interaction.reply({ embeds: [detailsEmbed], ephemeral: true });
-    }
 
     // Handle different button interactions
     if (customId === 'close_ticket_user') {
-        // Handle ticket closing logic
+        // Handle ticket transcript and close logic
         await interaction.deferReply({ flags: 64 });
-        
+
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('❌ این چنل یک تیکت نیست یا اطلاعات تیکت پیدا نشد.');
+                .setDescription('❌ This channel is not a ticket or ticket information was not found.');
             return interaction.editReply({ embeds: [errorEmbed] });
         }
 
-        // Create close message as the last message in the ticket
-        const closeEmbed = new EmbedBuilder()
-            .setColor('Red')
-            .setTitle('🔒 Ticket Closed')
-            .setDescription(`This ticket has been closed by ${user.tag}.`)
-            .addFields(
-                { name: 'Ticket Owner', value: `<@${ticketInfo.ownerId}>`, inline: true },
-                { name: 'Closed By', value: user.tag, inline: true },
-                { name: 'Reason', value: ticketInfo.reason || 'No reason provided', inline: false },
-                { name: 'Closed At', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: false }
-            )
-            .setTimestamp();
+        try {
+            // Create close embed without transcript
+            const closeEmbed = new EmbedBuilder()
+                .setColor('#ff6b6b')
+                .setTitle('🔒 Ticket Closed')
+                .setDescription('This ticket has been closed. You can reopen it or delete it.')
+                .addFields(
+                    { name: 'Closed by', value: user.toString(), inline: true },
+                    { name: 'Ticket ID', value: channel.id, inline: true },
+                    { name: 'Ticket Owner', value: `<@${ticketInfo.ownerId}>`, inline: true }
+                )
+                .setTimestamp();
 
-        // Send close message to the ticket channel
-        await channel.send({ embeds: [closeEmbed] });
+            // Send close message with action buttons
+            const actionRow = transcript.createTicketActionRow();
+            await channel.send({
+                embeds: [closeEmbed],
+                components: [actionRow]
+            });
 
-        // Delete ticket from database
-        db.tickets.delete(ticketInfo.ownerId);
-        db.ticketInfo.delete(channel.id);
-        
-        const successEmbed = new EmbedBuilder()
-            .setColor('Green')
-            .setDescription('✅ Ticket closed successfully. This channel will be deleted in 10 seconds...');
-        await interaction.editReply({ embeds: [successEmbed] });
-        
-        await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
-        
-        // Delete channel after 10 seconds
-        setTimeout(async () => {
-            try {
-                await channel.delete();
-            } catch (e) {
-                console.error('Error deleting ticket channel:', e);
+            // Update ticket status to closed
+            if (db.ticketInfo && db.ticketInfo.set) {
+                db.ticketInfo.set(channel.id, {
+                    ...ticketInfo,
+                    status: 'closed',
+                    closedBy: user.id,
+                    closedAt: Date.now()
+                });
             }
-        }, 10000);
+
+            // Disable original ticket buttons by updating the message
+            try {
+                const messages = await channel.messages.fetch({ limit: 10 });
+                const ticketMessage = messages.find(msg =>
+                    msg.author.id === client.user.id &&
+                    (msg.embeds[0]?.title?.includes('Ticket') || msg.components?.length > 0)
+                );
+
+                if (ticketMessage) {
+                    // Disable all buttons in the ticket message
+                    const disabledComponents = ticketMessage.components.map(row => ({
+                        ...row.toJSON(),
+                        components: row.components.map(component => ({
+                            ...component.toJSON(),
+                            disabled: true
+                        }))
+                    }));
+
+                    await ticketMessage.edit({
+                        embeds: ticketMessage.embeds,
+                        components: disabledComponents
+                    });
+                }
+            } catch (disableError) {
+                console.error('Error disabling ticket buttons:', disableError);
+            }
+
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('🔒 Ticket Closed')
+                .setDescription('✅ Ticket has been closed successfully.')
+                .addFields(
+                    { name: 'Ticket Owner', value: `<@${ticketInfo.ownerId}>`, inline: true },
+                    { name: 'Closed By', value: user.tag, inline: true },
+                    { name: 'Status', value: 'Closed', inline: false }
+                )
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [successEmbed] });
+            await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
+
+        } catch (error) {
+            console.error('Error closing ticket:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ Error closing ticket. Please try again.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
     }
     else if (customId === 'claim_ticket') {
         // Handle ticket claiming logic
@@ -207,7 +238,11 @@ async function handleButton(interaction, client, env) {
         const successEmbed = new EmbedBuilder()
             .setColor('Blue')
             .setDescription(`✅ تیکت توسط ${user.tag} تصدی شد.`);
-        await interaction.editReply({ embeds: [successEmbed] });
+        await channel.send({ embeds: [successEmbed] });
+        await interaction.editReply({
+            content: '✅ تیکت با موفقیت تصدی شد.',
+            flags: 64
+        });
         await logAction(guild, `👤 تیکت ${channel.name} توسط ${user.tag} تصدی شد.`);
     }
     else if (customId === 'complete_purchase') {
@@ -334,13 +369,138 @@ async function handleButton(interaction, client, env) {
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} ثبت شد.`);
     }
     else if (customId === 'transcript_ticket') {
-        // Handle ticket transcript
+        // Handle ticket transcript generation
         await interaction.deferReply({ flags: 64 });
-        
-        const infoEmbed = new EmbedBuilder()
-            .setColor('Blue')
-            .setDescription('📄 قابلیت transcript در آینده اضافه خواهد شد.');
-        await interaction.editReply({ embeds: [infoEmbed] });
+
+        try {
+            // Generate transcript
+            const transcriptFile = await transcript.createTranscriptFile(channel);
+
+            const transcriptEmbed = new EmbedBuilder()
+                .setColor('Blue')
+                .setTitle('📄 Ticket Transcript')
+                .setDescription('Here is the transcript for this ticket.')
+                .addFields(
+                    { name: 'Generated by', value: user.tag, inline: true },
+                    { name: 'Generated at', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
+                )
+                .setTimestamp();
+
+            await interaction.editReply({
+                embeds: [transcriptEmbed],
+                files: [transcriptFile]
+            });
+
+        } catch (error) {
+            console.error('Error generating transcript:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ Error creating transcript. Please try again.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
+    else if (customId === 'ticket_reopen') {
+        // Handle ticket reopening
+        if (!interaction.member.permissions.has('ManageChannels')) {
+            return await interaction.reply({
+                content: '❌ You do not have permission to manage tickets.',
+                flags: 64
+            });
+        }
+
+        await interaction.deferReply({ flags: 64 });
+
+        const ticketInfo = db.ticketInfo.get(channel.id);
+        if (!ticketInfo) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ Ticket information not found.');
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        // Update ticket status to open
+        if (db.ticketInfo && db.ticketInfo.set) {
+            db.ticketInfo.set(channel.id, {
+                ...ticketInfo,
+                status: 'open',
+                reopenedBy: user.id,
+                reopenedAt: Date.now()
+            });
+        }
+
+        const reopenEmbed = new EmbedBuilder()
+            .setColor('Green')
+            .setTitle('🔓 Ticket Reopened')
+            .setDescription(`This ticket has been reopened by ${user.tag}.`)
+            .addFields(
+                { name: 'Reopened by', value: user.tag, inline: true },
+                { name: 'Reopened at', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
+            )
+            .setTimestamp();
+
+        await channel.send({ embeds: [reopenEmbed] });
+        await interaction.editReply({
+            content: '✅ Ticket reopened successfully.',
+            flags: 64
+        });
+
+        await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
+    }
+    else if (customId === 'ticket_delete') {
+        // Handle ticket deletion
+        if (!interaction.member.permissions.has('ManageChannels')) {
+            return await interaction.reply({
+                content: '❌ You do not have permission to manage tickets.',
+                flags: 64
+            });
+        }
+
+        await interaction.deferReply({ flags: 64 });
+
+        const ticketInfo = db.ticketInfo.get(channel.id);
+        if (!ticketInfo) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ Ticket information not found.');
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        // Send final message
+        const deleteEmbed = new EmbedBuilder()
+            .setColor('Red')
+            .setTitle('🗑️ Ticket Deleted')
+            .setDescription(`This ticket has been deleted by ${user.tag}.`)
+            .addFields(
+                { name: 'Deleted by', value: user.tag, inline: true },
+                { name: 'Deleted at', value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
+            )
+            .setTimestamp();
+
+        await channel.send({ embeds: [deleteEmbed] });
+
+        // Delete ticket from database
+        if (db.tickets && db.tickets.delete) {
+            db.tickets.delete(ticketInfo.ownerId);
+        }
+        if (db.ticketInfo && db.ticketInfo.delete) {
+            db.ticketInfo.delete(channel.id);
+        }
+
+        await interaction.editReply({
+            content: '✅ Ticket deleted successfully. This channel will be deleted in 5 seconds.',
+            flags: 64
+        });
+
+        await logAction(guild, `🗑️ Ticket ${channel.name} deleted by ${user.tag}.`);
+
+        // Delete channel after 5 seconds
+        setTimeout(async () => {
+            try {
+                await channel.delete();
+            } catch (e) {
+                console.error('Error deleting ticket channel:', e);
+            }
+        }, 5000);
     }
     else {
         // Handle unknown button
@@ -399,7 +559,7 @@ async function handleSelectMenu(interaction, client, env) {
         return;
     }
     const { customId, values, user, guild } = interaction;
-    const db = require('./database');
+    const { db } = require('./database');
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     const { createTicketChannel, logAction } = require('./utils');
     const REVIEW_CHANNEL_ID = config.channels.review;
@@ -457,7 +617,7 @@ async function handleSelectMenu(interaction, client, env) {
 // --- handleModal ---
 async function handleModal(interaction, client, env) {
     const { customId, fields, user, guild } = interaction;
-    const db = require('./database');
+    const { db } = require('./database');
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     const { createTicketChannel, logAction } = require('./utils');
     const REVIEW_CHANNEL_ID = config.channels.review;
@@ -502,14 +662,15 @@ async function handleModal(interaction, client, env) {
             const details = fields.getTextInputValue('ticket_details') || '';
 
             // Check if user already has a ticket
-            if (db.tickets.has(user.id)) {
+            if (db.tickets && db.tickets.has && db.tickets.has(user.id)) {
                 const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ شما از قبل یک تیکت باز دارید: <#${db.tickets.get(user.id)}>`);
                 return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
             }
 
             // Create ticket channel with details
             await createTicketChannel(guild, user, reason, null, details);
-            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد: <#${db.tickets.get(user.id)}>`);
+            const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
+            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
             await interaction.reply({ embeds: [successEmbed], flags: 64 });
         } catch (err) {
             console.error('Error handling ticket details modal:', err);
@@ -521,7 +682,8 @@ async function handleModal(interaction, client, env) {
     if (customId === 'other_reason_modal') {
         const reason = fields.getTextInputValue('other_reason_input');
         await createTicketChannel(guild, user, 'غیره', reason);
-        const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد: <#${db.tickets.get(user.id)}>`);
+        const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
+        const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
         await interaction.reply({ embeds: [successEmbed], flags: 64 });
     }
 
@@ -606,5 +768,8 @@ async function handleModal(interaction, client, env) {
 module.exports = {
     handleButton,
     handleSelectMenu,
-    handleModal
+    handleModal,
+    setLogger,
+    setSecurity,
+    setConfig
 };

@@ -11,7 +11,7 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const axios = require('axios');
-const db = require('./database'); // مطمئن شوید فایل database.js وجود دارد
+const { db } = require('./database'); // مطمئن شوید فایل database.js وجود دارد
 const config = require('../configManager');
 
 // --- Global Variables & Cache ---
@@ -501,35 +501,20 @@ async function createTicketChannel(guild, user, reason, customReason = null, add
 
     const userButtons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('complete_purchase').setLabel(ticketConfig.buttons.user.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.user.completePurchase.style]),
-        new ButtonBuilder().setCustomId('close_ticket_user').setLabel(ticketConfig.buttons.user.closeTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.user.closeTicket.style])
+        new ButtonBuilder().setCustomId('close_ticket_user').setLabel(ticketConfig.buttons.user.closeTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.user.closeTicket.style]),
+        new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons.admin.claimTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.claimTicket.style])
     );
 
     const adminButtons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('record_order_admin').setLabel(ticketConfig.buttons.admin.recordOrder.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.recordOrder.style]),
-        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel(ticketConfig.buttons.admin.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.completePurchase.style]),
-        new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons.admin.claimTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.claimTicket.style])
+        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel(ticketConfig.buttons.admin.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.completePurchase.style])
     );
-
-    // Find category config to get detailed description
-    const categoryConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
-    const detailedDesc = categoryConfig?.detailedDescription || '';
-
-    // Add "More Details" button if category has detailed description
-    let moreDetailsButtons = null;
-    if (detailedDesc) {
-        moreDetailsButtons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`more_details_${reason}`).setLabel('📋 More Details').setStyle(ButtonStyle.Primary)
-        );
-    }
 
     const mentionText = ticketConfig.mentionText
         .replace('{user_id}', user.id)
         .replace('{ticket_access_role_id}', TICKET_ACCESS_ROLE_ID);
 
     const components = [userButtons, adminButtons];
-    if (moreDetailsButtons) {
-        components.push(moreDetailsButtons);
-    }
 
     await ticketChannel.send({ 
         content: mentionText, 

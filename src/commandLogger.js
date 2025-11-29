@@ -208,4 +208,4 @@ class CommandLogger {
     }
 }
 
-module.exports = new CommandLogger();
+module.exports = CommandLogger;

@@ -84,8 +84,15 @@ function cleanupPendingAccounts() {
     let cleanedCount = 0;
 
     try {
+        // Check if pendingAccounts collection exists
+        if (!db.pendingAccounts) {
+            console.warn('[DB] pendingAccounts collection not initialized');
+            return 0;
+        }
+
         // Iterate over all pending accounts to check for expiration
-        for (const [key, value] of db.pendingAccounts) {
+        // Use Array.from to ensure compatibility with Enmap
+        for (const [key, value] of Array.from(db.pendingAccounts.entries ? db.pendingAccounts.entries() : [])) {
             // Validate timestamp existence and format
             if (!value || typeof value !== 'object') {
                 console.warn(`[DB] Invalid pending account found for key: ${key}`);

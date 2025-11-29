@@ -29,6 +29,7 @@
     "deep-extend": "^0.6.0",
     "detect-libc": "^2.0.4",
     "discord-api-types": "^0.38.18",
+    "discord-html-transcripts": "^3.2.0",
     "discord.js": "^14.22.1",
     "end-of-stream": "^1.4.5",
     "enmap": "^6.1.3",

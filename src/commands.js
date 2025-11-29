@@ -11,14 +11,17 @@ const {
     ActionRowBuilder
 } = require('discord.js');
 
-const db = require('./database');
+const { db } = require('./database');
 const utils = require('./utils');
 const InteractionUtils = require('./utils/InteractionUtils');
 const config = require('../configManager');
 const { ValidationError, PermissionError } = require('./errors/BotError');
 
 let logger = null;
+let security = null;
+
 const setLogger = (l) => { logger = l; }
+const setSecurity = (s) => { security = s; }
 
 async function handleSlashCommand(interaction) {
     // --- /mcinfo ---
@@ -909,7 +912,69 @@ async function handleSlashCommand(interaction) {
     }
 }
 
+async function handleTextCommand(message, commandName, args) {
+    // Basic text command handler - most functionality is now in slash commands
+    try {
+        const config = require('../configManager');
+
+        // Simple help command
+        if (commandName === 'help') {
+            const embed = new EmbedBuilder()
+                .setColor('#3498DB')
+                .setTitle('🤖 Bot Help')
+                .setDescription('This bot now uses slash commands! Try typing `/` to see available commands.')
+                .addFields(
+                    { name: '📋 Available Commands', value: 'Use `/` to browse all slash commands', inline: false }
+                )
+                .setFooter({ text: 'Prefix commands are deprecated, please use slash commands instead.' })
+                .setTimestamp();
+
+            await message.reply({ embeds: [embed] });
+            return;
+        }
+
+        // For any other text command, suggest using slash commands
+        const embed = new EmbedBuilder()
+            .setColor('Orange')
+            .setTitle('⚠️ Command Not Found')
+            .setDescription(`The command \`${config.bot.prefix}${commandName}\` was not found.`)
+            .addFields(
+                { name: '💡 Try Slash Commands', value: 'Most commands are now available as slash commands. Type `/` to see them!', inline: false }
+            )
+            .setFooter({ text: 'Text commands are deprecated in favor of slash commands.' })
+            .setTimestamp();
+
+        await message.reply({ embeds: [embed] });
+
+        // Log the command attempt
+        if (logger) {
+            logger.logCommandError(new Error(`Text command not found: ${commandName}`), 'text_command', {
+                command: commandName,
+                args: args,
+                user: message.author.tag
+            });
+        }
+
+    } catch (error) {
+        console.error('Error handling text command:', error);
+        if (logger) {
+            logger.logCommandError(error, 'text_command', {
+                command: commandName,
+                args: args
+            });
+        }
+
+        try {
+            await message.reply('❌ An error occurred while processing your command.');
+        } catch (replyError) {
+            console.error('Failed to send error reply:', replyError);
+        }
+    }
+}
+
 module.exports = {
     handleSlashCommand,
-    setLogger
+    handleTextCommand,
+    setLogger,
+    setSecurity
 };
