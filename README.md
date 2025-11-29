@@ -62,7 +62,7 @@
 
 ### 2️⃣ Installation
 ```bash
-git clone https://github.com/YOUR_USERNAME/West-Bot.git
+git clone https://github.com/RezaNotHere/West-Bot.git
 cd West-Bot
 npm install
 ```
@@ -580,7 +580,7 @@ Contributions are welcome! Please:
 
 #### نصب سریع
 ```bash
-git clone https://github.com/YOUR_USERNAME/West-Bot.git
+git clone https://github.com/RezaNotHere/West-Bot.git
 cd West-Bot
 npm install
 cp config.example.json config.json
