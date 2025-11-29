@@ -221,31 +221,32 @@ class LoggerUtils {
     }
 
     /**
-     * اضافه کردن فیلدها به امبد
-     * @param {Object} embed - امبد دیسکورد
-     * @param {Object} fields - فیلدها
+     * ساخت امبد پایه با رنگ و زمان
+     * @param {string} level - سطح لاگ
+     * @param {string} title - عنوان امبد
+     * @param {string} description - توضیحات
      */
-    addFieldsToEmbed(embed, fields = {}) {
-        Object.entries(fields).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-                const stringValue = typeof value === 'string' 
-                    ? value 
-                    : '```json\n' + JSON.stringify(value, null, 2) + '\n```';
-                
-                if (stringValue.length > 1024) {
-                    const chunks = stringValue.match(/.{1,1024}/g) || [];
-                    chunks.forEach((chunk, index) => {
-                        embed.addFields({ 
-                            name: index === 0 ? key : '\u200b', 
-                            value: chunk, 
-                            inline: false 
-                        });
-                    });
-                } else {
-                    embed.addFields({ name: key, value: stringValue, inline: false });
-                }
-            }
-        });
+    buildBaseEmbed(level, title, description = '') {
+        const colors = {
+            info: 0x3498db,
+            success: 0x2ecc71,
+            warn: 0xf1c40f,
+            error: 0xe74c3c,
+            debug: 0x8e44ad,
+            security: 0xe67e22,
+            moderation: 0x9b59b6
+        };
+        
+        const embed = new EmbedBuilder()
+            .setColor(colors[level] || colors.info)
+            .setTitle(title)
+            .setTimestamp();
+        
+        if (description) {
+            embed.setDescription(description);
+        }
+        
+        return embed;
     }
 }
 
