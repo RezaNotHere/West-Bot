@@ -155,7 +155,7 @@ client.once(Events.ClientReady, async () => {
 
     // 🎉 Success Animation
     console.log('\n\x1b[92m╔══════════════════════════════════════════════════════════════╗');
-    console.log('║                    🎉 BOT SUCCESSFULLY LOADED! 🎉                    ║');
+    console.log('║                    🎉 BOT SUCCESSFULLY LOADED! 🎉                     ║');
     console.log('╚══════════════════════════════════════════════════════════════╝\x1b[0m');
 
     // 📊 Bot Information Display

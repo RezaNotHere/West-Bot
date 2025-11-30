@@ -147,7 +147,7 @@ async function addBadWord(word) {
     const cleanWord = word.toLowerCase().trim();
     if (badWords.has(cleanWord)) return false;
     badWords.add(cleanWord);
-    await db.badWords.set(cleanWord, true);
+    await db.bannedWords.set(cleanWord, true);
     return true;
 }
 
@@ -156,7 +156,7 @@ async function removeBadWord(word) {
     const cleanWord = word.toLowerCase().trim();
     if (!badWords.has(cleanWord)) return false;
     badWords.delete(cleanWord);
-    await db.badWords.delete(cleanWord);
+    await db.bannedWords.delete(cleanWord);
     return true;
 }
 
