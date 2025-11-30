@@ -445,16 +445,14 @@ client.on(Events.MessageCreate, async (message) => {
                     }
                     
                     // Log the ban
-                    await logger.logModeration('User Auto-Banned (3 Warnings)', 
-                        message.guild.members.me || { tag: 'System', id: '0' },
-                        message.author,
-                        {
-                            WarningCount: warningCount,
-                            Reason: 'Inappropriate language (bad words)',
-                            Action: 'Auto-ban after 3 warnings',
-                            Channel: `${message.channel.name} (${message.channel.id})`
-                        }
-                    );
+                    await logger.logInfo('User Auto-Banned (3 Warnings)', {
+                        Moderator: `${message.guild.members.me?.tag || 'System'} (${message.guild.members.me?.id || '0'})`,
+                        Target: `${message.author.tag} (${message.author.id})`,
+                        WarningCount: warningCount,
+                        Reason: 'Inappropriate language (bad words)',
+                        Action: 'Auto-ban after 3 warnings',
+                        Channel: `${message.channel.name} (${message.channel.id})`
+                    });
                     
                 } catch (banError) {
                     console.error('Failed to ban user:', banError);
@@ -484,16 +482,14 @@ client.on(Events.MessageCreate, async (message) => {
             }
             
             // Log bad word detection
-            await logger.logModeration('Bad Word Detected', 
-                message.guild.members.me || { tag: 'System', id: '0' },
-                message.author,
-                {
-                    Channel: `${message.channel.name} (${message.channel.id})`,
-                    Message: message.content.substring(0, 100),
-                    WarningCount: `${warningCount}/3`,
-                    Action: 'Message deleted + Warning added'
-                }
-            );
+            await logger.logInfo('Bad Word Detected', {
+                Moderator: `${message.guild.members.me?.tag || 'System'} (${message.guild.members.me?.id || '0'})`,
+                Target: `${message.author.tag} (${message.author.id})`,
+                Channel: `${message.channel.name} (${message.channel.id})`,
+                Message: message.content.substring(0, 100),
+                WarningCount: `${warningCount}/3`,
+                Action: 'Message deleted + Warning added'
+            });
             
             return; // Stop processing
         }
