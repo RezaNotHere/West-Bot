@@ -1433,7 +1433,7 @@ async function handleModal(interaction, client, env) {
 
             // Send preview
             await interaction.editReply({ 
-                content: `📋 **Advertisement Preview**\n\nThis advertisement will be sent to **${membersWithRole.size}** members with the **${targetRole.name}** role.\n\nPlease review and confirm:`,
+                content: `📋 **Advertisement Preview**\n\nThis advertisement will be sent to **${membersWithRole.size}** members with the **${targetRole.name}** role.\n\nPlease confirm to send:`,
                 embeds: [previewEmbed],
                 components: [actionRow, ...components]
             });
