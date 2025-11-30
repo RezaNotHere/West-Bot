@@ -68,6 +68,8 @@ for (const [name, settings] of Object.entries(COLLECTION_SETTINGS)) {
     db[name] = new EnmapClass({
         name,
         ...settings,
+        // Add data persistence to save to disk
+        dataDir: './data',
         // Add optional batching for large collections
         ensureProps: !settings.fetchAll
     });
