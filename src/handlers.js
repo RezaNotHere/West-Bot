@@ -1124,6 +1124,82 @@ async function handleModal(interaction, client, env) {
     const REVIEW_CHANNEL_ID = config.channels.review;
     const BUYER_ROLE_ID = config.roles.buyer;
 
+    if (customId === 'add_card_modal') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return await interaction.editReply({ content: '❌ You do not have permission to add cards.', flags: MessageFlags.Ephemeral });
+        }
+
+        try {
+            const cardNumber = fields.getTextInputValue('card_number');
+            const cardHolder = fields.getTextInputValue('card_holder');
+            const expiryDate = fields.getTextInputValue('expiry_date');
+            const cvv = fields.getTextInputValue('cvv');
+            const cardType = fields.getTextInputValue('card_type');
+
+            // Validate card number (16 digits)
+            if (!/^\d{16}$/.test(cardNumber)) {
+                return await interaction.editReply({ content: '❌ Card number must be exactly 16 digits.', flags: MessageFlags.Ephemeral });
+            }
+
+            // Validate expiry date (MM/YY format)
+            if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiryDate)) {
+                return await interaction.editReply({ content: '❌ Expiry date must be in MM/YY format (e.g., 12/25).', flags: MessageFlags.Ephemeral });
+            }
+
+            // Validate CVV (3 digits)
+            if (!/^\d{3}$/.test(cvv)) {
+                return await interaction.editReply({ content: '❌ CVV must be exactly 3 digits.', flags: MessageFlags.Ephemeral });
+            }
+
+            // Get existing cards
+            const cards = db.get('bank_cards') || [];
+            
+            // Add new card
+            const newCard = {
+                card_number: cardNumber,
+                card_holder: cardHolder,
+                expiry_date: expiryDate,
+                cvv: cvv,
+                card_type: cardType.toLowerCase(),
+                added_at: Date.now(),
+                added_by: `${interaction.user.tag} (${interaction.user.id})`
+            };
+
+            cards.push(newCard);
+            db.set('bank_cards', cards);
+
+            const embed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('✅ Card Added Successfully')
+                .setDescription('Bank card has been added to the database.')
+                .addFields(
+                    { name: 'Card Type', value: cardType.toUpperCase(), inline: true },
+                    { name: 'Card Holder', value: cardHolder, inline: true },
+                    { name: 'Last 4 Digits', value: `****-****-****-${cardNumber.slice(-4)}`, inline: true },
+                    { name: 'Expiry Date', value: expiryDate, inline: true },
+                    { name: 'Total Cards', value: `${cards.length}`, inline: true }
+                )
+                .setFooter({ text: `Added by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+
+            if (logger) {
+                await logger.logInfo('Card Added', {
+                    AddedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                    CardType: cardType,
+                    Last4Digits: cardNumber.slice(-4),
+                    TotalCards: cards.length
+                });
+            }
+
+        } catch (error) {
+            console.error('Error adding card:', error);
+            await interaction.editReply({ content: '❌ Error adding card to database.', flags: MessageFlags.Ephemeral });
+        }
+        return;
+    }
+
     if (customId.startsWith('review_comment_modal_')) {
         try {
             // Check if interaction is already replied/deferred

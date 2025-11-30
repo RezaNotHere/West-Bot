@@ -1105,6 +1105,232 @@ async function handleSlashCommand(interaction) {
         return;
     }
 
+    // --- /add_card ---
+    if (interaction.commandName === 'add_card') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to add cards.');
+        }
+
+        const modal = new ModalBuilder()
+            .setCustomId('add_card_modal')
+            .setTitle('Add Bank Card')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('card_number')
+                        .setLabel('Card Number')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('Enter 16-digit card number')
+                        .setRequired(true)
+                        .setMaxLength(16)
+                        .setMinLength(16)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('card_holder')
+                        .setLabel('Card Holder Name')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('Enter card holder name')
+                        .setRequired(true)
+                        .setMaxLength(50)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('expiry_date')
+                        .setLabel('Expiry Date (MM/YY)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('MM/YY')
+                        .setRequired(true)
+                        .setMaxLength(5)
+                        .setMinLength(5)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('cvv')
+                        .setLabel('CVV')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('Enter 3-digit CVV')
+                        .setRequired(true)
+                        .setMaxLength(3)
+                        .setMinLength(3)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('card_type')
+                        .setLabel('Card Type (visa/mastercard/etc)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('visa')
+                        .setRequired(true)
+                        .setMaxLength(20)
+                )
+            );
+
+        await interaction.showModal(modal);
+        return;
+    }
+
+    // --- /list_cards ---
+    if (interaction.commandName === 'list_cards') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to view cards.');
+        }
+
+        // Get cards from database
+        const cards = db.get('bank_cards') || [];
+        
+        if (cards.length === 0) {
+            const embed = new EmbedBuilder()
+                .setColor('Yellow')
+                .setTitle('💳 Bank Cards')
+                .setDescription('No cards found in the database.')
+                .setTimestamp();
+            
+            return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('Blue')
+            .setTitle('💳 Bank Cards')
+            .setDescription(`Found ${cards.length} card(s) in the database.`)
+            .setTimestamp();
+
+        // Add cards as fields (mask sensitive info)
+        cards.forEach((card, index) => {
+            const maskedNumber = `****-****-****-${card.card_number.slice(-4)}`;
+            embed.addFields({
+                name: `Card #${index + 1} - ${card.card_type.toUpperCase()}`,
+                value: `**Holder:** ${card.card_holder}\n**Number:** ${maskedNumber}\n**Expiry:** ${card.expiry_date}\n**Added:** <t:${Math.floor(card.added_at / 1000)}:R>`,
+                inline: false
+            });
+        });
+
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    // --- /send_card ---
+    if (interaction.commandName === 'send_card') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to send cards.');
+        }
+
+        const user = interaction.options.getUser('user');
+        if (!user) {
+            return await InteractionUtils.sendError(interaction, 'Please specify a user to send the card to.');
+        }
+
+        // Get cards from database
+        const cards = db.get('bank_cards') || [];
+        
+        if (cards.length === 0) {
+            return await InteractionUtils.sendError(interaction, 'No cards available in the database.');
+        }
+
+        // Get the first available card
+        const card = cards[0];
+        
+        // Remove card from database
+        db.set('bank_cards', cards.slice(1));
+
+        // Send card to user via DM
+        try {
+            const cardEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('💳 Your Bank Card Details')
+                .setDescription('Here are your card details. Please keep them secure!')
+                .addFields(
+                    { name: 'Card Type', value: card.card_type.toUpperCase(), inline: true },
+                    { name: 'Card Number', value: card.card_number, inline: true },
+                    { name: 'Card Holder', value: card.card_holder, inline: true },
+                    { name: 'Expiry Date', value: card.expiry_date, inline: true },
+                    { name: 'CVV', value: card.cvv, inline: true }
+                )
+                .setFooter({ text: 'This card has been removed from our database' })
+                .setTimestamp();
+
+            await user.send({ embeds: [cardEmbed] });
+
+            const confirmEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('✅ Card Sent Successfully')
+                .setDescription(`Card details have been sent to ${user.tag}`)
+                .addFields(
+                    { name: 'Card Type', value: card.card_type.toUpperCase(), inline: true },
+                    { name: 'Last 4 Digits', value: card.card_number.slice(-4), inline: true },
+                    { name: 'Remaining Cards', value: `${cards.length - 1}`, inline: true }
+                )
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [confirmEmbed] });
+
+            if (logger) {
+                await logger.logInfo('Card Sent', {
+                    Sender: `${interaction.user.tag} (${interaction.user.id})`,
+                    Recipient: `${user.tag} (${user.id})`,
+                    CardType: card.card_type,
+                    Last4Digits: card.card_number.slice(-4),
+                    RemainingCards: cards.length - 1
+                });
+            }
+
+        } catch (error) {
+            // Put card back if sending failed
+            db.set('bank_cards', cards);
+            await InteractionUtils.sendError(interaction, `Failed to send card to ${user.tag}: ${error.message}`);
+        }
+
+        return;
+    }
+
+    // --- /bansupport ---
+    if (interaction.commandName === 'bansupport') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to ban support users.');
+        }
+
+        const user = interaction.options.getUser('user');
+        const reason = interaction.options.getString('reason') || 'No reason provided';
+        
+        if (!user) {
+            return await InteractionUtils.sendError(interaction, 'Please specify a user to ban from support.');
+        }
+
+        try {
+            // Add to support ban list in database
+            const supportBans = db.get('support_bans') || [];
+            if (!supportBans.includes(user.id)) {
+                supportBans.push(user.id);
+                db.set('support_bans', supportBans);
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor('Red')
+                .setTitle('🔨 Support Ban')
+                .setDescription(`${user.tag} has been banned from creating support tickets.`)
+                .addFields(
+                    { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
+                    { name: 'Reason', value: reason, inline: true },
+                    { name: 'Moderator', value: interaction.user.tag, inline: true }
+                )
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed] });
+
+            if (logger) {
+                await logger.logInfo('Support Ban', {
+                    BannedUser: `${user.tag} (${user.id})`,
+                    Moderator: `${interaction.user.tag} (${interaction.user.id})`,
+                    Reason: reason
+                });
+            }
+
+        } catch (error) {
+            await InteractionUtils.sendError(interaction, `Failed to ban user from support: ${error.message}`);
+        }
+
+        return;
+    }
+
     // --- /sendmessage ---
     if (interaction.commandName === 'sendmessage') {
         const channel = interaction.options.getChannel('channel');
