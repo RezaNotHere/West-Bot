@@ -16,10 +16,11 @@ const setConfig = (c) => { configInstance = c; }
 
 // --- handleButton ---
 async function handleButton(interaction, client, env) {
-    console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
-    
-    // Handle appeal support ban button
-    if (interaction.customId.startsWith('appeal_support_ban_')) {
+    try {
+        console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
+        
+        // Handle appeal support ban button
+        if (interaction.customId.startsWith('appeal_support_ban_')) {
         const userId = interaction.customId.split('_')[3];
         
         // Check if this user is trying to appeal their own ban
@@ -2269,6 +2270,25 @@ async function handleAdvertisementButtons(interaction, client, env) {
             });
         }
         return;
+    } catch (buttonError) {
+        // Handle Discord API errors gracefully
+        if (buttonError.code === 10062) { // Unknown interaction
+            console.warn('⚠️ Button interaction expired:', buttonError.message);
+        } else if (buttonError.code === 10008) { // Unknown member
+            console.warn('⚠️ Member not found in button handler:', buttonError.message);
+        } else if (buttonError.code === 10013) { // Unknown user
+            console.warn('⚠️ User not found in button handler:', buttonError.message);
+        } else {
+            // Log other errors normally
+            console.error('❌ Button handling error:', buttonError);
+            if (logger) {
+                logger.logError(buttonError, 'Button Handler', {
+                    User: `${interaction.user?.tag} (${interaction.user?.id})`,
+                    CustomId: interaction.customId || 'N/A',
+                    Channel: interaction.channel?.name || 'DM'
+                });
+            }
+        }
     }
 }
 
