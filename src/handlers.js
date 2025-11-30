@@ -16,7 +16,7 @@ const setConfig = (c) => { configInstance = c; }
 
 // --- handleButton ---
 async function handleButton(interaction, client, env) {
-    console.log(`ðŸ”˜ Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
+    console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
     
     // Handle name history button
     if (interaction.customId.startsWith('namehistory_')) {
@@ -30,35 +30,35 @@ async function handleButton(interaction, client, env) {
             if (nameHistory && nameHistory.length > 0) {
                 const historyEmbed = new EmbedBuilder()
                     .setColor(0x2ecc71)
-                    .setTitle('ðŸ“œ Username History')
+                    .setTitle('📜 Username History')
                     .setDescription(nameHistory.map((entry, index) =>
                         `${index + 1}. \`${entry.name}\`${entry.changedToAt ? ` - <t:${Math.floor(entry.changedToAt / 1000)}:R>` : ' (Original)'}`
                     ).join('\n'))
                     .setFooter({ text: `UUID: ${uuid}` });
                 await interaction.reply({ embeds: [historyEmbed], flags: MessageFlags.Ephemeral });
-            else {
+            } else {
                 await interaction.reply({
-                    content: 'âŒ Username history not found.',
+                    content: '❌ Username history not found.',
                     flags: MessageFlags.Ephemeral
                 });
             }
         } catch (error) {
             console.error('Error handling name history button:', error);
             await interaction.reply({
-                content: 'âŒ Error fetching username history',
+                content: '❌ Error fetching username history',
                 flags: MessageFlags.Ephemeral
             });
         }
         return;
     }
 
-    // --- Ø´Ø±Ú©Øª Ø¯Ø± Ú¯ÛŒÙˆÙˆØ§ÛŒ ---
+    // --- شرکت در گیووای ---
     if (interaction.customId === 'join_giveaway') {
-        // ÙÙ‚Ø· Ø§Ø¹Ø¶Ø§ÛŒ Ø³Ø±ÙˆØ± Ø§Ø¬Ø§Ø²Ù‡ Ø´Ø±Ú©Øª Ø¯Ø§Ø±Ù†Ø¯
+        // فقط اعضای سرور اجازه شرکت دارند
         if (!interaction.member) {
             return interaction.reply({ content: 'You must be a server member to participate.', flags: MessageFlags.Ephemeral });
         }
-        // Ù¾ÛŒØ¯Ø§ Ú©Ø±Ø¯Ù† Ú¯ÛŒÙˆÙˆØ§ÛŒ ÙØ¹Ø§Ù„ Ø¨Ø± Ø§Ø³Ø§Ø³ Ø¢ÛŒØ¯ÛŒ Ù¾ÛŒØ§Ù…
+        // پیدا کردن گیووای فعال بر اساس آیدی پیام
         const giveaway = db.giveaways.get(interaction.message.id);
         if (!giveaway || giveaway.ended) {
             return interaction.reply({ content: 'Active giveaway not found or has ended.', flags: MessageFlags.Ephemeral });
@@ -69,16 +69,16 @@ async function handleButton(interaction, client, env) {
         }
         giveaway.participants.push(interaction.user.id);
         db.giveaways.set(interaction.message.id, giveaway);
-        // Ø¢Ù¾Ø¯ÛŒØª Ø´Ù…Ø§Ø±Ù†Ø¯Ù‡ Ø´Ø±Ú©Øªâ€ŒÚ©Ù†Ù†Ø¯Ù‡â€ŒÙ‡Ø§ Ø¯Ø± Ø§Ù…Ø¨Ø¯
+        // آپدیت شمارنده شرکت‌کننده‌ها در امبد
         try {
             const msg = await interaction.channel.messages.fetch(interaction.message.id).catch(() => null);
             if (msg && msg.embeds && msg.embeds[0]) {
                 const oldEmbed = msg.embeds[0];
                 let newDesc = oldEmbed.description || '';
-                if (newDesc.includes('ðŸ‘¥ Ø´Ø±Ú©Øªâ€ŒÚ©Ù†Ù†Ø¯Ù‡ ØªØ§ Ø§ÛŒÙ† Ù„Ø­Ø¸Ù‡:')) {
-                    newDesc = newDesc.replace(/ðŸ‘¥ Ø´Ø±Ú©Øªâ€ŒÚ©Ù†Ù†Ø¯Ù‡ ØªØ§ Ø§ÛŒÙ† Ù„Ø­Ø¸Ù‡: \*\*\d+ Ù†ÙØ±\*\*/, `ðŸ‘¥ Ø´Ø±Ú©Øªâ€ŒÚ©Ù†Ù†Ø¯Ù‡ ØªØ§ Ø§ÛŒÙ† Ù„Ø­Ø¸Ù‡: **${giveaway.participants.length} Ù†ÙØ±**`);
-                else {
-                    newDesc += `\n\nðŸ‘¥ Ø´Ø±Ú©Øªâ€ŒÚ©Ù†Ù†Ø¯Ù‡ ØªØ§ Ø§ÛŒÙ† Ù„Ø­Ø¸Ù‡: **${giveaway.participants.length} Ù†ÙØ±**`;
+                if (newDesc.includes('👥 شرکت‌کننده تا این لحظه:')) {
+                    newDesc = newDesc.replace(/👥 شرکت‌کننده تا این لحظه: \*\*\d+ نفر\*\*/, `👥 شرکت‌کننده تا این لحظه: **${giveaway.participants.length} نفر**`);
+                } else {
+                    newDesc += `\n\n👥 شرکت‌کننده تا این لحظه: **${giveaway.participants.length} نفر**`;
                 }
                 const newEmbed = EmbedBuilder.from(oldEmbed).setDescription(newDesc);
                 await msg.edit({ embeds: [newEmbed], components: msg.components });
@@ -86,7 +86,7 @@ async function handleButton(interaction, client, env) {
         } catch (err) {
             console.error('Error updating giveaway embed:', err);
         }
-        await interaction.reply({ content: 'You have successfully joined the giveaway! Good luck! ðŸŽ‰', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: 'You have successfully joined the giveaway! Good luck! 🎉', flags: MessageFlags.Ephemeral });
         return;
     }
     console.log(`Checking role button for customId='${interaction.customId}' (startsWith 'rolebtn_': ${interaction.customId ? interaction.customId.startsWith('rolebtn_') : false})`);
@@ -96,31 +96,31 @@ async function handleButton(interaction, client, env) {
         const roleId = interaction.customId.split('_')[1];
         const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
         if (!member) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('âŒ Ú©Ø§Ø±Ø¨Ø± ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('❌ کاربر یافت نشد.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const role = interaction.guild.roles.cache.get(roleId);
         if (!role) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('âŒ Ø±ÙˆÙ„ Ù…ÙˆØ±Ø¯ Ù†Ø¸Ø± ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('❌ رول مورد نظر یافت نشد.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         // Check if bot can manage this role
         if (role.position >= interaction.guild.members.me.roles.highest.position) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('âŒ Ø±Ø¨Ø§Øª Ù†Ù…ÛŒâ€ŒØªÙˆØ§Ù†Ø¯ Ø§ÛŒÙ† Ø±ÙˆÙ„ Ø±Ø§ Ù…Ø¯ÛŒØ±ÛŒØª Ú©Ù†Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('❌ ربات نمی‌تواند این رول را مدیریت کند.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         let action, color, emoji;
         try {
             if (member.roles.cache.has(roleId)) {
                 await member.roles.remove(roleId);
-                action = 'âŒ Ø±ÙˆÙ„ Ø¨Ø±Ø¯Ø§Ø´ØªÙ‡ Ø´Ø¯';
+                action = '❌ رول برداشته شد';
                 color = 'Red';
-                emoji = 'âž–';
-            else {
+                emoji = '➖';
+            } else {
                 await member.roles.add(roleId);
-                action = 'âœ… Ø±ÙˆÙ„ Ø§Ø¶Ø§ÙÙ‡ Ø´Ø¯';
+                action = '✅ رول اضافه شد';
                 color = 'Green';
-                emoji = 'âž•';
+                emoji = '➕';
             }
             const embed = new EmbedBuilder().setColor(color).setDescription(`${emoji} ${action}: <@&${roleId}>`);
             await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -128,7 +128,7 @@ async function handleButton(interaction, client, env) {
             console.error('Error handling role button:', err);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± Ù…Ø¯ÛŒØ±ÛŒØª Ø±ÙˆÙ„. Ù…Ù…Ú©Ù† Ø§Ø³Øª Ø±ÙˆÙ„ Ø¨Ø§Ù„Ø§ØªØ± Ø§Ø² Ø±ÙˆÙ„ Ø±Ø¨Ø§Øª Ø¨Ø§Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù„Ø§Ø²Ù… ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø´ØªÙ‡ Ø¨Ø§Ø´Ø¯.');
+                .setDescription('❌ خطا در مدیریت رول. ممکن است رول بالاتر از رول ربات باشد یا دسترسی لازم وجود نداشته باشد.');
             await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         return;
@@ -140,10 +140,10 @@ async function handleButton(interaction, client, env) {
 
     // Handle different button interactions
     if (customId === 'close_ticket_user') {
-        console.log(`ðŸ”’ Close ticket button clicked by ${user.tag}`);
+        console.log(`🔒 Close ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
-            console.log('âš ï¸ Interaction already replied/deferred');
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
 
@@ -155,7 +155,7 @@ async function handleButton(interaction, client, env) {
             if (!ticketInfo) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('Red')
-                    .setDescription('âŒ This channel is not a ticket or ticket information was not found.');
+                    .setDescription('❌ This channel is not a ticket or ticket information was not found.');
                 return interaction.editReply({ embeds: [errorEmbed] });
             }
 
@@ -185,13 +185,13 @@ async function handleButton(interaction, client, env) {
             // Send confirmation message
             const closeEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
-                .setTitle('ðŸ”’ ØªÛŒÚ©Øª Ø¨Ø³ØªÙ‡ Ø´Ø¯')
-                .setDescription(`ØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø³ØªÙ‡ Ø´Ø¯. Ø§Ú¯Ø± Ù†ÛŒØ§Ø² Ø¨Ù‡ Ú©Ù…Ú© Ø¨ÛŒØ´ØªØ±ÛŒ Ø¯Ø§Ø±ÛŒØ¯ØŒ Ù„Ø·ÙØ§Ù‹ ØªÛŒÚ©Øª Ø¬Ø¯ÛŒØ¯ÛŒ Ø¨Ø§Ø² Ú©Ù†ÛŒØ¯.\n\nØªÛŒÚ©Øª Ø¨Ù‡ Ø¢Ø±Ø´ÛŒÙˆ Ù…Ù†ØªÙ‚Ù„ Ø´Ø¯ Ùˆ Ø¯ÛŒÚ¯Ø± Ù†Ù…ÛŒâ€ŒØªÙˆØ§Ù†ÛŒØ¯ Ø¯Ø± Ø¢Ù† Ù¾ÛŒØ§Ù… Ø§Ø±Ø³Ø§Ù„ Ú©Ù†ÛŒØ¯.`)
+                .setTitle('🔒 تیکت بسته شد')
+                .setDescription(`تیکت شما بسته شد. اگر نیاز به کمک بیشتری دارید، لطفاً تیکت جدیدی باز کنید.\n\nتیکت به آرشیو منتقل شد و دیگر نمی‌توانید در آن پیام ارسال کنید.`)
                 .addFields(
-                    { name: 'Ø¨Ø³ØªÙ‡ Ø´Ø¯Ù‡ ØªÙˆØ³Ø·', value: `${user.tag}`, inline: true },
-                    { name: 'Ø²Ù…Ø§Ù† Ø¨Ø³ØªÙ‡ Ø´Ø¯Ù†', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                    { name: 'بسته شده توسط', value: `${user.tag}`, inline: true },
+                    { name: 'زمان بسته شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
                 )
-                .setFooter({ text: 'Ø¨Ø§ ØªØ´Ú©Ø± Ø§Ø² ØªÙ…Ø§Ø³ Ø´Ù…Ø§' })
+                .setFooter({ text: 'با تشکر از تماس شما' })
                 .setTimestamp();
 
             // Update database and send message in parallel
@@ -211,8 +211,8 @@ async function handleButton(interaction, client, env) {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('Green')
-                        .setTitle('âœ… ØªÛŒÚ©Øª Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø¨Ø³ØªÙ‡ Ø´Ø¯')
-                        .setDescription(`ØªÛŒÚ©Øª ${channel.name} Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø¨Ø³ØªÙ‡ Ø´Ø¯ Ùˆ Ø¨Ù‡ Ø¢Ø±Ø´ÛŒÙˆ Ù…Ù†ØªÙ‚Ù„ Ú¯Ø±Ø¯ÛŒØ¯.`)
+                        .setTitle('✅ تیکت با موفقیت بسته شد')
+                        .setDescription(`تیکت ${channel.name} با موفقیت بسته شد و به آرشیو منتقل گردید.`)
                         .setTimestamp()
                 ]
             });
@@ -231,21 +231,21 @@ async function handleButton(interaction, client, env) {
             );
             
             if (originalMessage) {
-                console.log(`ðŸ”„ Found ticket creation message: ${originalMessage.id}`);
+                console.log(`🔄 Found ticket creation message: ${originalMessage.id}`);
                 
                 // All buttons in one row for closed tickets
                 const closedTicketButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('reopen_ticket')
-                        .setLabel('ðŸ”“ Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† ØªÛŒÚ©Øª')
+                        .setLabel('🔓 باز کردن تیکت')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('create_transcript')
-                        .setLabel('ðŸ“‹ Ø³Ø§Ø®Øª ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª')
+                        .setLabel('📋 ساخت ترنسکریپت')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId('ticket_delete')
-                        .setLabel('ðŸ—‘ï¸ Ø­Ø°Ù ØªÛŒÚ©Øª')
+                        .setLabel('🗑️ حذف تیکت')
                         .setStyle(ButtonStyle.Danger)
                 );
 
@@ -255,15 +255,15 @@ async function handleButton(interaction, client, env) {
                     components: [closedTicketButtons]
                 });
                 
-                console.log('âœ… Ticket buttons updated successfully after closing');
-            else {
-                console.log('âŒ Could not find ticket creation message to update buttons');
+                console.log('✅ Ticket buttons updated successfully after closing');
+            } else {
+                console.log('❌ Could not find ticket creation message to update buttons');
             }
 
             // Background logging (non-blocking)
             setImmediate(async () => {
                 try {
-                    await logAction(guild, `ðŸ”’ Ticket ${channel.name} closed by ${user.tag}.`);
+                    await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
                     
                     if (logger) {
                         await logger.logTicket('Closed', user, {
@@ -285,17 +285,17 @@ async function handleButton(interaction, client, env) {
             if (!interaction.replied && !interaction.deferred) {
                 try {
                     await interaction.reply({
-                        content: 'âŒ Ø®Ø·Ø§ÛŒÛŒ Ø¯Ø± Ø¨Ø³ØªÙ† ØªÛŒÚ©Øª Ø±Ø® Ø¯Ø§Ø¯.',
+                        content: '❌ خطایی در بستن تیکت رخ داد.',
                         flags: MessageFlags.Ephemeral
                     });
                 } catch (replyError) {
                     console.error('Failed to reply to interaction:', replyError);
                 }
-            else if (interaction.deferred) {
+            } else if (interaction.deferred) {
                 try {
                     const errorEmbed = new EmbedBuilder()
                         .setColor('Red')
-                        .setDescription('âŒ Ø®Ø·Ø§ÛŒÛŒ Ø¯Ø± Ø¨Ø³ØªÙ† ØªÛŒÚ©Øª Ø±Ø® Ø¯Ø§Ø¯.');
+                        .setDescription('❌ خطایی در بستن تیکت رخ داد.');
                     await interaction.editReply({ embeds: [errorEmbed] });
                 } catch (replyErr) {
                     // If edit fails, log it but don't throw
@@ -313,17 +313,17 @@ async function handleButton(interaction, client, env) {
                     User: `${user.tag} (${user.id})`,
                     Channel: channel.name
                 });
-            else {
+            } else {
                 console.error('Error closing ticket:', error);
             }
         }
     }
     else if (customId === 'claim_ticket') {
-        console.log(`ðŸ‘‹ Claim ticket button clicked by ${user.tag}`);
+        console.log(`👋 Claim ticket button clicked by ${user.tag}`);
         // Handle ticket claiming logic
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
-            console.log('âš ï¸ Interaction already replied/deferred');
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -332,20 +332,20 @@ async function handleButton(interaction, client, env) {
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯.');
+                .setDescription('❌ اطلاعات تیکت پیدا نشد.');
             return interaction.editReply({ embeds: [errorEmbed] });
         }
 
         // Quick database update and message send in parallel
         const claimEmbed = new EmbedBuilder()
             .setColor('#9B59B6')
-            .setTitle('ðŸ‘¤ ØªÛŒÚ©Øª ØªØµØ¯ÛŒ Ø´Ø¯')
-            .setDescription(`Ø§ÛŒÙ† ØªÛŒÚ©Øª ØªÙˆØ³Ø· <@${user.id}> ØªØµØ¯ÛŒ Ø´Ø¯ Ùˆ Ø§Ú©Ù†ÙˆÙ† Ø¯Ø± Ø­Ø§Ù„ Ø¨Ø±Ø±Ø³ÛŒ Ø§Ø³Øª.\n\nØªÛŒÙ… Ù¾Ø´ØªÛŒØ¨Ø§Ù†ÛŒ Ø¨Ù‡ Ø²ÙˆØ¯ÛŒ Ø¨Ù‡ Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø´Ù…Ø§ Ø±Ø³ÛŒØ¯Ú¯ÛŒ Ø®ÙˆØ§Ù‡Ø¯ Ú©Ø±Ø¯.`)
+            .setTitle('👤 تیکت تصدی شد')
+            .setDescription(`این تیکت توسط <@${user.id}> تصدی شد و اکنون در حال بررسی است.\n\nتیم پشتیبانی به زودی به درخواست شما رسیدگی خواهد کرد.`)
             .addFields(
-                { name: 'ðŸ‘¤ ØªØµØ¯ÛŒ Ø´Ø¯Ù‡ ØªÙˆØ³Ø·', value: `<@${user.id}>`, inline: true },
-                { name: 'â° Ø²Ù…Ø§Ù† ØªØµØ¯ÛŒ', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                { name: '👤 تصدی شده توسط', value: `<@${user.id}>`, inline: true },
+                { name: '⏰ زمان تصدی', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
             )
-            .setFooter({ text: 'Ø³ÛŒØ³ØªÙ… ØªÛŒÚ©Øª' })
+            .setFooter({ text: 'سیستم تیکت' })
             .setTimestamp();
 
         await Promise.all([
@@ -366,23 +366,23 @@ async function handleButton(interaction, client, env) {
             );
             
             if (originalMessage) {
-                console.log(`ðŸ”„ Found ticket creation message for claim: ${originalMessage.id}`);
+                console.log(`🔄 Found ticket creation message for claim: ${originalMessage.id}`);
                 
                 // Keep admin buttons active except claim button (so claimer can still use them)
                 const updatedAdminButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('record_order_admin')
-                        .setLabel('ðŸ“ Record Order')
+                        .setLabel('📝 Record Order')
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(false), // Keep active for claimer
                     new ButtonBuilder()
                         .setCustomId('complete_purchase_admin')
-                        .setLabel('âœ… Complete Purchase')
+                        .setLabel('✅ Complete Purchase')
                         .setStyle(ButtonStyle.Success)
                         .setDisabled(false), // Keep active for claimer
                     new ButtonBuilder()
                         .setCustomId('claim_ticket')
-                        .setLabel('ðŸ‘‹ Claim Ticket (Already Claimed)')
+                        .setLabel('👋 Claim Ticket (Already Claimed)')
                         .setStyle(ButtonStyle.Secondary)
                         .setDisabled(true) // Only disable claim button
                 );
@@ -393,16 +393,16 @@ async function handleButton(interaction, client, env) {
                     components: [originalMessage.components[0], updatedAdminButtons]
                 });
                 
-                console.log('âœ… Only claim button disabled, other admin buttons remain active for claimer');
-            else {
-                console.log('âŒ Could not find ticket creation message to disable claim button');
+                console.log('✅ Only claim button disabled, other admin buttons remain active for claimer');
+            } else {
+                console.log('❌ Could not find ticket creation message to disable claim button');
             }
 
         await interaction.editReply({
             embeds: [
                 new EmbedBuilder()
                     .setColor('#2ECC71')
-                    .setDescription('âœ… ØªÛŒÚ©Øª Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª ØªØµØ¯ÛŒ Ø´Ø¯.')
+                    .setDescription('✅ تیکت با موفقیت تصدی شد.')
                     .setTimestamp()
             ]
         });
@@ -410,7 +410,7 @@ async function handleButton(interaction, client, env) {
         // Background logging (non-blocking)
         setImmediate(async () => {
             try {
-                await logAction(guild, `ðŸ‘¤ ØªÛŒÚ©Øª ${channel.name} ØªÙˆØ³Ø· ${user.tag} ØªØµØ¯ÛŒ Ø´Ø¯.`);
+                await logAction(guild, `👤 تیکت ${channel.name} توسط ${user.tag} تصدی شد.`);
                 
                 if (logger) {
                     await logger.logTicket('Claimed', user, {
@@ -425,34 +425,34 @@ async function handleButton(interaction, client, env) {
         });
     }
     else if (customId === 'complete_purchase') {
-        console.log(`âœ… Complete purchase button clicked by ${user.tag}`);
+        console.log(`✅ Complete purchase button clicked by ${user.tag}`);
         // Handle purchase completion - show rating menu
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
-            console.log('âš ï¸ Interaction already replied/deferred');
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const ratingMenu = new StringSelectMenuBuilder()
             .setCustomId('rating_input')
-            .setPlaceholder('Ø§Ù…ØªÛŒØ§Ø² Ø®ÙˆØ¯ Ø±Ø§ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†ÛŒØ¯')
+            .setPlaceholder('امتیاز خود را انتخاب کنید')
             .addOptions(
-                new StringSelectMenuOptionBuilder().setLabel('â­ 1 Ø³ØªØ§Ø±Ù‡').setValue('1'),
-                new StringSelectMenuOptionBuilder().setLabel('â­â­ 2 Ø³ØªØ§Ø±Ù‡').setValue('2'),
-                new StringSelectMenuOptionBuilder().setLabel('â­â­â­ 3 Ø³ØªØ§Ø±Ù‡').setValue('3'),
-                new StringSelectMenuOptionBuilder().setLabel('â­â­â­â­ 4 Ø³ØªØ§Ø±Ù‡').setValue('4'),
-                new StringSelectMenuOptionBuilder().setLabel('â­â­â­â­â­ 5 Ø³ØªØ§Ø±Ù‡').setValue('5')
+                new StringSelectMenuOptionBuilder().setLabel('⭐ 1 ستاره').setValue('1'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐ 2 ستاره').setValue('2'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐ 3 ستاره').setValue('3'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐ 4 ستاره').setValue('4'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐⭐ 5 ستاره').setValue('5')
             );
 
         const row = new ActionRowBuilder().addComponents(ratingMenu);
 
-        await interaction.editReply({ content: 'âœ… Ø®Ø±ÛŒØ¯ ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯', components: [row] });
+        await interaction.editReply({ content: '✅ خرید تکمیل شد', components: [row] });
 
         // Background logging (non-blocking)
         setImmediate(async () => {
             try {
-                await logAction(guild, `âœ… Ø®Ø±ÛŒØ¯ Ú©Ø§Ø±Ø¨Ø± ${user.tag} Ø¯Ø± ØªÛŒÚ©Øª ${channel.name} ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯.`);
+                await logAction(guild, `✅ خرید کاربر ${user.tag} در تیکت ${channel.name} تکمیل شد.`);
                 
                 if (logger) {
                     await logger.logShop('Purchase Completed', user, {
@@ -466,36 +466,36 @@ async function handleButton(interaction, client, env) {
         });
     }
     else if (customId === 'complete_purchase_admin') {
-        console.log(`âœ… Complete purchase (admin) button clicked by ${user.tag}`);
+        console.log(`✅ Complete purchase (admin) button clicked by ${user.tag}`);
         // Only admins
         if (!interaction.member.permissions.has('Administrator')) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('Ø´Ù…Ø§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù„Ø§Ø²Ù… Ø¨Ø±Ø§ÛŒ Ø§ÛŒÙ† Ø¹Ù…Ù„ÛŒØ§Øª Ø±Ø§ Ù†Ø¯Ø§Ø±ÛŒØ¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('شما دسترسی لازم برای این عملیات را ندارید.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('اطلاعات تیکت یافت نشد.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const owner = await client.users.fetch(ticketInfo.ownerId).catch(() => null);
         if (!owner) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('Ú©Ø§Ø±Ø¨Ø± ØªÛŒÚ©Øª ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('کاربر تیکت یافت نشد.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         // DM to ticket owner
         const dmEmbed = new EmbedBuilder()
             .setColor('#9B59B6')
-            .setTitle('ðŸŽ‰ Ø³ÙØ§Ø±Ø´ Ø´Ù…Ø§ ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯!')
-            .setDescription(`Ø®Ø¨Ø± Ø®ÙˆØ´! Ø³ÙØ§Ø±Ø´ Ø´Ù…Ø§ Ø¯Ø± **${guild.name}** Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª ØªÚ©Ù…ÛŒÙ„ Ùˆ Ø¢Ù…Ø§Ø¯Ù‡ Ø§Ø³ØªÙØ§Ø¯Ù‡ Ø§Ø³Øª. Ø§Ø² Ø§Ø¹ØªÙ…Ø§Ø¯ Ø´Ù…Ø§ Ù†Ø³Ø¨Øª Ø¨Ù‡ Ø®Ø¯Ù…Ø§Øª Ù…Ø§ Ø¨ÛŒâ€ŒÙ†Ù‡Ø§ÛŒØª Ø³Ù¾Ø§Ø³Ú¯Ø²Ø§Ø±ÛŒÙ….\n\nÚ©ÛŒÙÛŒØª Ùˆ Ø±Ø¶Ø§ÛŒØª Ø´Ù…Ø§ Ù…Ù‡Ù…ØªØ±ÛŒÙ† Ø§ÙˆÙ„ÙˆÛŒØª Ù…Ø§Ø³Øª. Ù„Ø·ÙØ§Ù‹ **Ù†Ø¸Ø± Ùˆ ØªØ¬Ø±Ø¨Ù‡ Ø®ÙˆØ¯ Ø±Ø§ Ø§Ø² ØªÚ©Ù…ÛŒÙ„ Ø®Ø±ÛŒØ¯ Ø­ØªÙ…Ø§Ù‹ Ø«Ø¨Øª Ú©Ù†ÛŒØ¯**. Ø¯Ø± ØµÙˆØ±Øª Ø¯Ø§Ø´ØªÙ† Ù‡Ø±Ú¯ÙˆÙ†Ù‡ Ø³Ø¤Ø§Ù„ØŒ Ù†Ø¸Ø± ÛŒØ§ Ù…Ø´Ú©Ù„ØŒ Ø®ÙˆØ´Ø­Ø§Ù„ Ù…ÛŒâ€ŒØ´ÙˆÛŒÙ… Ù…Ø¬Ø¯Ø¯Ø§Ù‹ Ø¯Ø± Ø®Ø¯Ù…Øª Ø´Ù…Ø§ Ø¨Ø§Ø´ÛŒÙ….`)
+            .setTitle('🎉 سفارش شما تکمیل شد!')
+            .setDescription(`خبر خوش! سفارش شما در **${guild.name}** با موفقیت تکمیل و آماده استفاده است. از اعتماد شما نسبت به خدمات ما بی‌نهایت سپاسگزاریم.\n\nکیفیت و رضایت شما مهمترین اولویت ماست. لطفاً **نظر و تجربه خود را از تکمیل خرید حتماً ثبت کنید**. در صورت داشتن هرگونه سؤال، نظر یا مشکل، خوشحال می‌شویم مجدداً در خدمت شما باشیم.`)
             .addFields(
-                { name: 'ðŸª ÙØ±ÙˆØ´Ú¯Ø§Ù‡', value: guild.name, inline: true },
-                { name: 'ðŸ“… ØªØ§Ø±ÛŒØ® ØªÚ©Ù…ÛŒÙ„', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
-                { name: 'ðŸ‘¤ Ú©Ø§Ø±Ø¨Ø±', value: owner.tag, inline: true },
-                { name: 'ðŸ“‹ ÙˆØ¶Ø¹ÛŒØª', value: 'âœ… ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯Ù‡ Ùˆ ØªØ­ÙˆÛŒÙ„ Ø¯Ø§Ø¯Ù‡ Ø´Ø¯Ù‡', inline: false },
-                { name: 'ðŸ”„ Ø®Ø¯Ù…Ø§Øª Ø¨Ø¹Ø¯ÛŒ', value: 'Ø¨Ø±Ø§ÛŒ Ø³ÙØ§Ø±Ø´â€ŒÙ‡Ø§ÛŒ Ø¬Ø¯ÛŒØ¯ Ù…ÛŒâ€ŒØªÙˆØ§Ù†ÛŒØ¯ Ù…Ø¬Ø¯Ø¯Ø§Ù‹ ØªÛŒÚ©Øª Ø¨Ø§Ø² Ú©Ù†ÛŒØ¯', inline: false }
+                { name: '🏪 فروشگاه', value: guild.name, inline: true },
+                { name: '📅 تاریخ تکمیل', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
+                { name: '👤 کاربر', value: owner.tag, inline: true },
+                { name: '📋 وضعیت', value: '✅ تکمیل شده و تحویل داده شده', inline: false },
+                { name: '🔄 خدمات بعدی', value: 'برای سفارش‌های جدید می‌توانید مجدداً تیکت باز کنید', inline: false }
             )
             .setThumbnail(guild.iconURL())
-            .setFooter({ text: 'ðŸ’Ž Ø¨Ø§ ØªØ´Ú©Ø± Ø§Ø² Ø§Ø¹ØªÙ…Ø§Ø¯ Ø´Ù…Ø§ - ØªÛŒÙ… Ù¾Ø´ØªÛŒØ¨Ø§Ù†ÛŒ', iconURL: guild.iconURL() })
+            .setFooter({ text: '💎 با تشکر از اعتماد شما - تیم پشتیبانی', iconURL: guild.iconURL() })
             .setTimestamp();
         try {
             await owner.send({ embeds: [dmEmbed] });
@@ -505,18 +505,18 @@ async function handleButton(interaction, client, env) {
         // Notify in ticket channel
         const completionEmbed = new EmbedBuilder()
             .setColor('#2ECC71')
-            .setTitle('âœ… Ø³ÙØ§Ø±Ø´ ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯')
-            .setDescription(`Ø³ÙØ§Ø±Ø´ <@${owner.id}> ØªÙˆØ³Ø· ${interaction.user} Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª ØªÚ©Ù…ÛŒÙ„ Ùˆ ØªØ­ÙˆÛŒÙ„ Ø¯Ø§Ø¯Ù‡ Ø´Ø¯.\n\nÚ©Ø§Ø±Ø¨Ø± Ø§Ø·Ù„Ø§Ø¹â€ŒØ±Ø³Ø§Ù†ÛŒ Ø´Ø¯Ù‡ Ùˆ Ù…ÛŒâ€ŒØªÙˆØ§Ù†Ø¯ Ù†Ø¸Ø± Ø®ÙˆØ¯ Ø±Ø§ Ø«Ø¨Øª Ú©Ù†Ø¯.`)
+            .setTitle('✅ سفارش تکمیل شد')
+            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} با موفقیت تکمیل و تحویل داده شد.\n\nکاربر اطلاع‌رسانی شده و می‌تواند نظر خود را ثبت کند.`)
             .addFields(
-                { name: 'ðŸ‘¤ Ù…Ø´ØªØ±ÛŒ', value: `<@${owner.id}>`, inline: true },
-                { name: 'ðŸ› ï¸ ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯Ù‡ ØªÙˆØ³Ø·', value: `${interaction.user}`, inline: true },
-                { name: 'â° Ø²Ù…Ø§Ù† ØªÚ©Ù…ÛŒÙ„', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+                { name: '👤 مشتری', value: `<@${owner.id}>`, inline: true },
+                { name: '🛠️ تکمیل شده توسط', value: `${interaction.user}`, inline: true },
+                { name: '⏰ زمان تکمیل', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
-            .setFooter({ text: 'Ø³ÛŒØ³ØªÙ… ØªÛŒÚ©Øª' })
+            .setFooter({ text: 'سیستم تیکت' })
             .setTimestamp();
 
         await interaction.reply({ embeds: [completionEmbed] });
-        await logAction(guild, `Ø³ÙØ§Ø±Ø´ ØªÛŒÚ©Øª ${channel.name} ØªÙˆØ³Ø· ${interaction.user.tag} ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯.`);
+        await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} تکمیل شد.`);
         
         if (logger) {
             await logger.logModeration('Order Completed (Admin)', interaction.user, owner, {
@@ -526,36 +526,36 @@ async function handleButton(interaction, client, env) {
         }
     }
     else if (customId === 'record_order_admin') {
-        console.log(`ðŸ“ Record order (admin) button clicked by ${user.tag}`);
+        console.log(`📝 Record order (admin) button clicked by ${user.tag}`);
         // Only admins can record orders
         if (!interaction.member.permissions.has('Administrator')) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('Ø´Ù…Ø§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù„Ø§Ø²Ù… Ø¨Ø±Ø§ÛŒ Ø§ÛŒÙ† Ø¹Ù…Ù„ÛŒØ§Øª Ø±Ø§ Ù†Ø¯Ø§Ø±ÛŒØ¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('شما دسترسی لازم برای این عملیات را ندارید.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const ticketInfo = db.ticketInfo.get(channel.id);
         if (!ticketInfo) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('اطلاعات تیکت یافت نشد.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         const owner = await client.users.fetch(ticketInfo.ownerId).catch(() => null);
         if (!owner) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('Ú©Ø§Ø±Ø¨Ø± ØªÛŒÚ©Øª ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('کاربر تیکت یافت نشد.');
             return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         // DM to ticket owner for order recorded
         const dmEmbed = new EmbedBuilder()
             .setColor('#9B59B6')
-            .setTitle('ðŸ“ Ø³ÙØ§Ø±Ø´ Ø´Ù…Ø§ Ø«Ø¨Øª Ø´Ø¯!')
-            .setDescription(`Ø³ÙØ§Ø±Ø´ Ø´Ù…Ø§ Ø¯Ø± **${guild.name}** Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø«Ø¨Øª Ø´Ø¯ Ùˆ Ø¯Ø± ØµÙ Ù¾Ø±Ø¯Ø§Ø²Ø´ Ù‚Ø±Ø§Ø± Ú¯Ø±ÙØª. ØªÛŒÙ… Ù…Ø§ Ø¯Ø± Ø­Ø§Ù„ Ø¢Ù…Ø§Ø¯Ù‡â€ŒØ³Ø§Ø²ÛŒ Ø³ÙØ§Ø±Ø´ Ø´Ù…Ø§ Ù‡Ø³ØªÙ†Ø¯.\n\nØ¨Ù‡ Ø²ÙˆØ¯ÛŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ø¨ÛŒØ´ØªØ±ÛŒ Ø¯Ø±Ø¨Ø§Ø±Ù‡ ÙˆØ¶Ø¹ÛŒØª Ø³ÙØ§Ø±Ø´â€ŒØªØ§Ù† Ø¯Ø±ÛŒØ§ÙØª Ø®ÙˆØ§Ù‡ÛŒØ¯ Ú©Ø±Ø¯. Ù„Ø·ÙØ§Ù‹ ØµØ¨ÙˆØ± Ø¨Ø§Ø´ÛŒØ¯.`)
+            .setTitle('📝 سفارش شما ثبت شد!')
+            .setDescription(`سفارش شما در **${guild.name}** با موفقیت ثبت شد و در صف پردازش قرار گرفت. تیم ما در حال آماده‌سازی سفارش شما هستند.\n\nبه زودی اطلاعات بیشتری درباره وضعیت سفارش‌تان دریافت خواهید کرد. لطفاً صبور باشید.`)
             .addFields(
-                { name: 'ðŸª ÙØ±ÙˆØ´Ú¯Ø§Ù‡', value: guild.name, inline: true },
-                { name: 'ðŸ“… ØªØ§Ø±ÛŒØ® Ø«Ø¨Øª', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
-                { name: 'ðŸ‘¤ Ú©Ø§Ø±Ø¨Ø±', value: owner.tag, inline: true },
-                { name: 'ðŸ“‹ ÙˆØ¶Ø¹ÛŒØª', value: 'ðŸ“ Ø«Ø¨Øª Ø´Ø¯Ù‡ - Ø¯Ø± Ø­Ø§Ù„ Ù¾Ø±Ø¯Ø§Ø²Ø´', inline: false },
-                { name: 'â±ï¸ Ø²Ù…Ø§Ù† ØªØ­ÙˆÛŒÙ„', value: 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ø¯Ù‚ÛŒÙ‚ Ø²Ù…Ø§Ù† ØªØ­ÙˆÛŒÙ„ Ø¨Ù‡ Ø²ÙˆØ¯ÛŒ Ø§Ø±Ø³Ø§Ù„ Ø®ÙˆØ§Ù‡Ø¯ Ø´Ø¯', inline: false }
+                { name: '🏪 فروشگاه', value: guild.name, inline: true },
+                { name: '📅 تاریخ ثبت', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
+                { name: '👤 کاربر', value: owner.tag, inline: true },
+                { name: '📋 وضعیت', value: '📝 ثبت شده - در حال پردازش', inline: false },
+                { name: '⏱️ زمان تحویل', value: 'اطلاعات دقیق زمان تحویل به زودی ارسال خواهد شد', inline: false }
             )
             .setThumbnail(guild.iconURL())
-            .setFooter({ text: 'ðŸ“‹ ØªÛŒÙ… Ù¾Ø±Ø¯Ø§Ø²Ø´ Ø³ÙØ§Ø±Ø´Ø§Øª Ø¯Ø± Ø®Ø¯Ù…Øª Ø´Ù…Ø§', iconURL: guild.iconURL() })
+            .setFooter({ text: '📋 تیم پردازش سفارشات در خدمت شما', iconURL: guild.iconURL() })
             .setTimestamp();
         try {
             await owner.send({ embeds: [dmEmbed] });
@@ -565,18 +565,18 @@ async function handleButton(interaction, client, env) {
         // Notify in ticket channel
         const recordEmbed = new EmbedBuilder()
             .setColor('#3498DB')
-            .setTitle('ðŸ“ Ø³ÙØ§Ø±Ø´ Ø«Ø¨Øª Ø´Ø¯')
-            .setDescription(`Ø³ÙØ§Ø±Ø´ <@${owner.id}> ØªÙˆØ³Ø· ${interaction.user} Ø«Ø¨Øª Ø´Ø¯ Ùˆ Ø¯Ø± ØµÙ Ù¾Ø±Ø¯Ø§Ø²Ø´ Ù‚Ø±Ø§Ø± Ú¯Ø±ÙØª.\n\nÚ©Ø§Ø±Ø¨Ø± Ø§Ø·Ù„Ø§Ø¹â€ŒØ±Ø³Ø§Ù†ÛŒ Ø´Ø¯Ù‡ Ùˆ Ù…Ù†ØªØ¸Ø± ØªÚ©Ù…ÛŒÙ„ Ø³ÙØ§Ø±Ø´ Ø§Ø³Øª.`)
+            .setTitle('📝 سفارش ثبت شد')
+            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} ثبت شد و در صف پردازش قرار گرفت.\n\nکاربر اطلاع‌رسانی شده و منتظر تکمیل سفارش است.`)
             .addFields(
-                { name: 'ðŸ‘¤ Ù…Ø´ØªØ±ÛŒ', value: `<@${owner.id}>`, inline: true },
-                { name: 'ðŸ“‹ Ø«Ø¨Øª Ø´Ø¯Ù‡ ØªÙˆØ³Ø·', value: `${interaction.user}`, inline: true },
-                { name: 'â° Ø²Ù…Ø§Ù† Ø«Ø¨Øª', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+                { name: '👤 مشتری', value: `<@${owner.id}>`, inline: true },
+                { name: '📋 ثبت شده توسط', value: `${interaction.user}`, inline: true },
+                { name: '⏰ زمان ثبت', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
             )
-            .setFooter({ text: 'Ø³ÛŒØ³ØªÙ… ØªÛŒÚ©Øª' })
+            .setFooter({ text: 'سیستم تیکت' })
             .setTimestamp();
 
         await interaction.reply({ embeds: [recordEmbed] });
-        await logAction(guild, `Ø³ÙØ§Ø±Ø´ ØªÛŒÚ©Øª ${channel.name} ØªÙˆØ³Ø· ${interaction.user.tag} Ø«Ø¨Øª Ø´Ø¯.`);
+        await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} ثبت شد.`);
         
         if (logger) {
             await logger.logModeration('Order Recorded (Admin)', interaction.user, owner, {
@@ -598,7 +598,7 @@ async function handleButton(interaction, client, env) {
             const transcriptFile = await transcript.createTranscriptFile(channel);
 
             await interaction.editReply({
-                content: 'ðŸ“„ Transcript generated',
+                content: '📄 Transcript generated',
                 files: [transcriptFile]
             });
 
@@ -606,7 +606,7 @@ async function handleButton(interaction, client, env) {
             console.error('Error generating transcript:', error);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Error creating transcript. Please try again.');
+                .setDescription('❌ Error creating transcript. Please try again.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
@@ -615,7 +615,7 @@ async function handleButton(interaction, client, env) {
         if (!interaction.member.permissions.has('ManageChannels')) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø´Ù…Ø§ Ø§Ø¬Ø§Ø²Ù‡ Ù…Ø¯ÛŒØ±ÛŒØª ØªÛŒÚ©Øªâ€ŒÙ‡Ø§ Ø±Ø§ Ù†Ø¯Ø§Ø±ÛŒØ¯.');
+                .setDescription('❌ شما اجازه مدیریت تیکت‌ها را ندارید.');
             return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
 
@@ -637,7 +637,7 @@ async function handleButton(interaction, client, env) {
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+                .setDescription('❌ اطلاعات تیکت یافت نشد.');
             return interaction.editReply({ embeds: [errorEmbed] });
         }
 
@@ -670,13 +670,13 @@ async function handleButton(interaction, client, env) {
             // Send reopen message with embed
             const reopenEmbed = new EmbedBuilder()
                 .setColor('#3498DB')
-                .setTitle('ðŸ”“ ØªÛŒÚ©Øª Ù…Ø¬Ø¯Ø¯Ø§Ù‹ Ø¨Ø§Ø² Ø´Ø¯')
-                .setDescription(`Ø§ÛŒÙ† ØªÛŒÚ©Øª ØªÙˆØ³Ø· <@${user.id}> Ù…Ø¬Ø¯Ø¯Ø§Ù‹ Ø¨Ø§Ø² Ø´Ø¯.\n\nØ§Ú©Ù†ÙˆÙ† Ù…ÛŒâ€ŒØªÙˆØ§Ù†ÛŒØ¯ Ù¾ÛŒØ§Ù…â€ŒÙ‡Ø§ÛŒ Ø¬Ø¯ÛŒØ¯ Ø§Ø±Ø³Ø§Ù„ Ú©Ù†ÛŒØ¯ Ùˆ Ø¨Ø§ ØªÛŒÙ… Ù¾Ø´ØªÛŒØ¨Ø§Ù†ÛŒ Ø¯Ø± Ø§Ø±ØªØ¨Ø§Ø· Ø¨Ø§Ø´ÛŒØ¯.`)
+                .setTitle('🔓 تیکت مجدداً باز شد')
+                .setDescription(`این تیکت توسط <@${user.id}> مجدداً باز شد.\n\nاکنون می‌توانید پیام‌های جدید ارسال کنید و با تیم پشتیبانی در ارتباط باشید.`)
                 .addFields(
-                    { name: 'ðŸ‘¤ Ø¨Ø§Ø² Ø´Ø¯Ù‡ ØªÙˆØ³Ø·', value: `<@${user.id}>`, inline: true },
-                    { name: 'â° Ø²Ù…Ø§Ù† Ø¨Ø§Ø² Ø´Ø¯Ù†', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                    { name: '👤 باز شده توسط', value: `<@${user.id}>`, inline: true },
+                    { name: '⏰ زمان باز شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
                 )
-                .setFooter({ text: 'Ø³ÛŒØ³ØªÙ… ØªÛŒÚ©Øª' })
+                .setFooter({ text: 'سیستم تیکت' })
                 .setTimestamp();
 
             await channel.send({ embeds: [reopenEmbed] });
@@ -686,7 +686,7 @@ async function handleButton(interaction, client, env) {
                 const messages = await channel.messages.fetch({ limit: 20 });
                 const ticketMessage = messages.find(msg =>
                     msg.author.id === client.user.id &&
-                    msg.embeds[0]?.title?.includes('ØªÛŒÚ©Øª') &&
+                    msg.embeds[0]?.title?.includes('تیکت') &&
                     msg.components?.length > 0
                 );
 
@@ -731,10 +731,10 @@ async function handleButton(interaction, client, env) {
 
             const successEmbed = new EmbedBuilder()
                 .setColor('#2ECC71')
-                .setDescription('âœ… ØªÛŒÚ©Øª Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ù…Ø¬Ø¯Ø¯Ø§Ù‹ Ø¨Ø§Ø² Ø´Ø¯.');
+                .setDescription('✅ تیکت با موفقیت مجدداً باز شد.');
 
             await interaction.editReply({ embeds: [successEmbed] });
-            await logAction(guild, `ðŸ”“ Ticket ${channel.name} reopened by ${user.tag}.`);
+            await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
             
             if (logger) {
                 await logger.logTicket('Reopened', user, {
@@ -748,7 +748,7 @@ async function handleButton(interaction, client, env) {
             console.error('Error reopening ticket:', error);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† Ù…Ø¬Ø¯Ø¯ ØªÛŒÚ©Øª. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.');
+                .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
@@ -756,7 +756,7 @@ async function handleButton(interaction, client, env) {
         // Handle ticket deletion
         if (!interaction.member.permissions.has('ManageChannels')) {
             return await interaction.reply({
-                content: 'âŒ You do not have permission to manage tickets.',
+                content: '❌ You do not have permission to manage tickets.',
                 flags: MessageFlags.Ephemeral
             });
         }
@@ -769,7 +769,7 @@ async function handleButton(interaction, client, env) {
         // Quick reply first, then process deletion in background
         const processingEmbed = new EmbedBuilder()
             .setColor('Yellow')
-            .setDescription('â³ Ø¯Ø± Ø­Ø§Ù„ Ø­Ø°Ù ØªÛŒÚ©Øª...');
+            .setDescription('⏳ در حال حذف تیکت...');
         await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
 
         // Process deletion in background
@@ -779,15 +779,15 @@ async function handleButton(interaction, client, env) {
                 if (!ticketInfo) {
                     const errorEmbed = new EmbedBuilder()
                         .setColor('Red')
-                        .setDescription('âŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯.');
+                        .setDescription('❌ اطلاعات تیکت پیدا نشد.');
                     return interaction.editReply({ embeds: [errorEmbed] });
                 }
 
                 // Send final message before deletion
                 const deleteEmbed = new EmbedBuilder()
                     .setColor('Red')
-                    .setTitle('ðŸ—‘ï¸ ØªÛŒÚ©Øª Ø­Ø°Ù Ø´Ø¯')
-                    .setDescription(`ØªÛŒÚ©Øª ØªÙˆØ³Ø· ${user.tag} Ø­Ø°Ù Ø´Ø¯.`)
+                    .setTitle('🗑️ تیکت حذف شد')
+                    .setDescription(`تیکت توسط ${user.tag} حذف شد.`)
                     .setTimestamp();
                 await channel.send({ embeds: [deleteEmbed] });
 
@@ -795,7 +795,7 @@ async function handleButton(interaction, client, env) {
                 try {
                     const successEmbed = new EmbedBuilder()
                         .setColor('Green')
-                        .setDescription('âœ… ØªÛŒÚ©Øª Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø­Ø°Ù Ø´Ø¯.');
+                        .setDescription('✅ تیکت با موفقیت حذف شد.');
                     await interaction.editReply({ embeds: [successEmbed] });
                 } catch (interactionError) {
                     console.log('Interaction expired before channel deletion, but continuing...');
@@ -816,7 +816,7 @@ async function handleButton(interaction, client, env) {
 
                 // Background logging (non-blocking)
                 setImmediate(async () => {
-                    await logAction(guild, `ðŸ—‘ï¸ Ticket ${channel.name} deleted by ${user.tag}.`);
+                    await logAction(guild, `🗑️ Ticket ${channel.name} deleted by ${user.tag}.`);
                     
                     if (logger) {
                         await logger.logTicket('Deleted', user, {
@@ -831,16 +831,16 @@ async function handleButton(interaction, client, env) {
                 console.error('Error deleting ticket:', error);
                 const errorEmbed = new EmbedBuilder()
                     .setColor('Red')
-                    .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± Ø­Ø°Ù ØªÛŒÚ©Øª. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.');
+                    .setDescription('❌ خطا در حذف تیکت. لطفاً دوباره تلاش کنید.');
                 await interaction.editReply({ embeds: [errorEmbed] });
             }
         });
     }
     else if (customId === 'complete_purchase') {
-        console.log(`âœ… Complete purchase button clicked by ${user.tag}`);
+        console.log(`✅ Complete purchase button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
-            console.log('âš ï¸ Interaction already replied/deferred');
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -850,14 +850,14 @@ async function handleButton(interaction, client, env) {
             if (!ticketInfo) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('Red')
-                    .setDescription('âŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯.');
+                    .setDescription('❌ اطلاعات تیکت پیدا نشد.');
                 return interaction.editReply({ embeds: [errorEmbed] });
             }
 
             const completeEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setTitle('âœ… Ø®Ø±ÛŒØ¯ Ú©Ø§Ù…Ù„ Ø´Ø¯')
-                .setDescription(`Ø®Ø±ÛŒØ¯ ØªÛŒÚ©Øª ØªÙˆØ³Ø· ${user.tag} ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯.`)
+                .setTitle('✅ خرید کامل شد')
+                .setDescription(`خرید تیکت توسط ${user.tag} تکمیل شد.`)
                 .setTimestamp();
 
             await Promise.all([
@@ -867,13 +867,13 @@ async function handleButton(interaction, client, env) {
 
             const successEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setDescription('âœ… Ø®Ø±ÛŒØ¯ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯.');
+                .setDescription('✅ خرید با موفقیت تکمیل شد.');
 
             await interaction.editReply({ embeds: [successEmbed] });
             
             // Background logging (non-blocking)
             setImmediate(async () => {
-                await logAction(guild, `âœ… Purchase completed for ticket ${channel.name} by ${user.tag}.`);
+                await logAction(guild, `✅ Purchase completed for ticket ${channel.name} by ${user.tag}.`);
                 
                 if (logger) {
                     await logger.logTicket('Completed', user, {
@@ -888,15 +888,15 @@ async function handleButton(interaction, client, env) {
             console.error('Error completing purchase:', error);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± ØªÚ©Ù…ÛŒÙ„ Ø®Ø±ÛŒØ¯. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.');
+                .setDescription('❌ خطا در تکمیل خرید. لطفاً دوباره تلاش کنید.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
     else if (customId === 'create_transcript') {
-        console.log(`ðŸ“‹ Create transcript button clicked by ${user.tag}`);
+        console.log(`📋 Create transcript button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
-            console.log('âš ï¸ Interaction already replied/deferred');
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -904,7 +904,7 @@ async function handleButton(interaction, client, env) {
         // Quick reply first, then process transcript in background
         const processingEmbed = new EmbedBuilder()
             .setColor('Yellow')
-            .setDescription('â³ Ø¯Ø± Ø­Ø§Ù„ Ø³Ø§Ø®Øª ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª... Ù„Ø·ÙØ§Ù‹ ØµØ¨Ø± Ú©Ù†ÛŒØ¯.');
+            .setDescription('⏳ در حال ساخت ترنسکریپت... لطفاً صبر کنید.');
         await interaction.editReply({ embeds: [processingEmbed] });
 
         try {
@@ -915,16 +915,16 @@ async function handleButton(interaction, client, env) {
                     const messages = await channel.messages.fetch({ limit: 50 });
                     
                     // Create transcript content
-                    let transcript = `ðŸ“‹ ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª ØªÛŒÚ©Øª: ${channel.name}\n`;
-                    transcript += `ðŸ‘¤ ØµØ§Ø­Ø¨ ØªÛŒÚ©Øª: <@${db.ticketInfo.get(channel.id)?.ownerId}>\n`;
-                    transcript += `â° Ø²Ù…Ø§Ù† Ø³Ø§Ø®Øª: <t:${Math.floor((db.ticketInfo.get(channel.id)?.createdAt || Date.now()) / 1000)}:F>\n`;
-                    transcript += `ðŸ“ Ø¯Ù„ÛŒÙ„: ${db.ticketInfo.get(channel.id)?.reason || 'Ù†Ø§Ù…Ø´Ø®Øµ'}\n`;
+                    let transcript = `📋 ترنسکریپت تیکت: ${channel.name}\n`;
+                    transcript += `👤 صاحب تیکت: <@${db.ticketInfo.get(channel.id)?.ownerId}>\n`;
+                    transcript += `⏰ زمان ساخت: <t:${Math.floor((db.ticketInfo.get(channel.id)?.createdAt || Date.now()) / 1000)}:F>\n`;
+                    transcript += `📝 دلیل: ${db.ticketInfo.get(channel.id)?.reason || 'نامشخص'}\n`;
                     transcript += `${'='.repeat(50)}\n\n`;
 
                     messages.forEach(msg => {
                         transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content}\n`;
                         if (msg.attachments.size > 0) {
-                            transcript += `[ÙØ§ÛŒÙ„(Ù‡Ø§): ${msg.attachments.map(a => a.url).join(', ')}]\n`;
+                            transcript += `[فایل(ها): ${msg.attachments.map(a => a.url).join(', ')}]\n`;
                         }
                         transcript += '\n';
                     });
@@ -935,23 +935,23 @@ async function handleButton(interaction, client, env) {
                         const chunks = transcript.match(/.{1,2000}/g) || [];
                         for (let i = 0; i < chunks.length; i++) {
                             await interaction.followUp({
-                                content: `\`\`\`\nðŸ“‹ ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª (Ø¨Ø®Ø´ ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\`\`\``,
+                                content: `\`\`\`\n📋 ترنسکریپت (بخش ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\`\`\``,
                                 flags: MessageFlags.Ephemeral
                             });
                         }
-                    else {
+                    } else {
                         await interaction.editReply({
-                            content: `\`\`\`\nðŸ“‹ ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª ØªÛŒÚ©Øª:\n\n${transcript}\n\`\`\``
+                            content: `\`\`\`\n📋 ترنسکریپت تیکت:\n\n${transcript}\n\`\`\``
                         });
                     }
 
-                    await logAction(guild, `ðŸ“‹ Transcript created for ticket ${channel.name} by ${user.tag}.`);
+                    await logAction(guild, `📋 Transcript created for ticket ${channel.name} by ${user.tag}.`);
 
                 } catch (error) {
                     console.error('Error creating transcript:', error);
                     const errorEmbed = new EmbedBuilder()
                         .setColor('Red')
-                        .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± Ø³Ø§Ø®Øª ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.');
+                        .setDescription('❌ خطا در ساخت ترنسکریپت. لطفاً دوباره تلاش کنید.');
                     await interaction.editReply({ embeds: [errorEmbed] });
                 }
             });
@@ -960,15 +960,15 @@ async function handleButton(interaction, client, env) {
             console.error('Error starting transcript creation:', error);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± Ø´Ø±ÙˆØ¹ Ø³Ø§Ø®Øª ØªØ±Ù†Ø³Ú©Ø±ÛŒÙ¾Øª.');
+                .setDescription('❌ خطا در شروع ساخت ترنسکریپت.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
     else if (customId === 'reopen_ticket') {
-        console.log(`ðŸ”“ Reopen ticket button clicked by ${user.tag}`);
+        console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
-            console.log('âš ï¸ Interaction already replied/deferred');
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -977,7 +977,7 @@ async function handleButton(interaction, client, env) {
         if (!ticketInfo) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø§Ø·Ù„Ø§Ø¹Ø§Øª ØªÛŒÚ©Øª Ù¾ÛŒØ¯Ø§ Ù†Ø´Ø¯.');
+                .setDescription('❌ اطلاعات تیکت پیدا نشد.');
             return interaction.editReply({ embeds: [errorEmbed] });
         }
 
@@ -985,7 +985,7 @@ async function handleButton(interaction, client, env) {
             // Quick reply first, then process in background
             const processingEmbed = new EmbedBuilder()
                 .setColor('Yellow')
-                .setDescription('â³ Ø¯Ø± Ø­Ø§Ù„ Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† ØªÛŒÚ©Øª...');
+                .setDescription('⏳ در حال باز کردن تیکت...');
             await interaction.editReply({ embeds: [processingEmbed] });
 
             // Process all operations in parallel for speed
@@ -1011,14 +1011,14 @@ async function handleButton(interaction, client, env) {
 
             // Restore original buttons
             const userButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('complete_purchase').setLabel('âœ… Complete Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('close_ticket_user').setLabel('ðŸ”’ Close Ticket').setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('complete_purchase').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('close_ticket_user').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
             );
 
             const adminButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('record_order_admin').setLabel('ðŸ“ Record Order').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('âœ… Complete Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('claim_ticket').setLabel('ðŸ‘‹ Claim Ticket').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('record_order_admin').setLabel('📝 Record Order').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
             );
 
             // Find the ticket message with reopen/transcript buttons
@@ -1034,28 +1034,28 @@ async function handleButton(interaction, client, env) {
             );
             
             if (originalMessage) {
-                console.log(`ðŸ”„ Found closed ticket message: ${originalMessage.id}`);
+                console.log(`🔄 Found closed ticket message: ${originalMessage.id}`);
                 await originalMessage.edit({
                     content: originalMessage.content,
                     embeds: originalMessage.embeds,
                     components: [userButtons, adminButtons]
                 });
                 
-                console.log('âœ… Ticket buttons restored successfully after reopening');
-            else {
-                console.log('âŒ Could not find closed ticket message to restore buttons');
+                console.log('✅ Ticket buttons restored successfully after reopening');
+            } else {
+                console.log('❌ Could not find closed ticket message to restore buttons');
             }
 
             // Final success message
             const successEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setDescription('âœ… ØªÛŒÚ©Øª Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ù…Ø¬Ø¯Ø¯Ø§Ù‹ Ø¨Ø§Ø² Ø´Ø¯.');
+                .setDescription('✅ تیکت با موفقیت مجدداً باز شد.');
 
             await interaction.editReply({ embeds: [successEmbed] });
             
             // Background logging (non-blocking)
             setImmediate(async () => {
-                await logAction(guild, `ðŸ”“ Ticket ${channel.name} reopened by ${user.tag}.`);
+                await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
                 
                 if (logger) {
                     await logger.logTicket('Reopened', user, {
@@ -1070,7 +1070,7 @@ async function handleButton(interaction, client, env) {
             console.error('Error reopening ticket:', error);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('âŒ Ø®Ø·Ø§ Ø¯Ø± Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† Ù…Ø¬Ø¯Ø¯ ØªÛŒÚ©Øª. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.');
+                .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
@@ -1084,7 +1084,7 @@ async function handleButton(interaction, client, env) {
         console.log(`Unknown button clicked: customId='${interaction.customId}', user='${interaction.user.id}', guild='${interaction.guild.id}'`);
         const errorEmbed = new EmbedBuilder()
             .setColor('Red')
-            .setDescription(`âŒ Ø¯Ú©Ù…Ù‡ Ù†Ø§Ù…Ø´Ø®Øµ: ${customId}`);
+            .setDescription(`❌ دکمه نامشخص: ${customId}`);
         await interaction.editReply({ embeds: [errorEmbed] });
     }
 }
@@ -1118,8 +1118,8 @@ async function handleSelectMenu(interaction, client, env) {
         }
 
         if (reason === 'other') {
-            const modal = new ModalBuilder().setCustomId('other_reason_modal').setTitle('Ø¯Ù„ÛŒÙ„ Ø¯ÛŒÚ¯Ø± Ø¨Ø±Ø§ÛŒ Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† ØªÛŒÚ©Øª');
-            const input = new TextInputBuilder().setCustomId('other_reason_input').setLabel('Ù„Ø·ÙØ§ Ø¯Ù„ÛŒÙ„ Ø®ÙˆØ¯ Ø±Ø§ Ø¨Ù†ÙˆÛŒØ³ÛŒØ¯').setStyle(TextInputStyle.Paragraph).setRequired(true);
+            const modal = new ModalBuilder().setCustomId('other_reason_modal').setTitle('دلیل دیگر برای باز کردن تیکت');
+            const input = new TextInputBuilder().setCustomId('other_reason_input').setLabel('لطفا دلیل خود را بنویسید').setStyle(TextInputStyle.Paragraph).setRequired(true);
             modal.addComponents(new ActionRowBuilder().addComponents(input));
             return interaction.showModal(modal);
         }
@@ -1130,14 +1130,14 @@ async function handleSelectMenu(interaction, client, env) {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (db.tickets.has(user.id)) {
-            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`âŒ Ø´Ù…Ø§ Ø§Ø² Ù‚Ø¨Ù„ ÛŒÚ© ØªÛŒÚ©Øª Ø¨Ø§Ø² Ø¯Ø§Ø±ÛŒØ¯: <#${db.tickets.get(user.id)}>`);
+            const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ شما از قبل یک تیکت باز دارید: <#${db.tickets.get(user.id)}>`);
             return interaction.editReply({ embeds: [errorEmbed] });
         }
         await createTicketChannel(guild, user, reason);
         const ticketChannelId = db.tickets.get(user.id);
         const successEmbed = new EmbedBuilder()
             .setColor('Green')
-            .setDescription(`ØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯!\n\nØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø§ Ø¬Ø²Ø¦ÛŒØ§Øª Ú©Ø§Ù…Ù„ Ø§ÛŒØ¬Ø§Ø¯ Ø´Ø¯. Ø¨Ø±Ø§ÛŒ Ø¯Ø³ØªØ±Ø³ÛŒ Ø³Ø±ÛŒØ¹ Ø¨Ù‡ ØªÛŒÚ©ØªØŒ Ø±ÙˆÛŒ Ù„ÛŒÙ†Ú© Ø²ÛŒØ± Ú©Ù„ÛŒÚ© Ú©Ù†ÛŒØ¯:\n\n[ðŸš€ Ø±ÙØªÙ† Ø¨Ù‡ ØªÛŒÚ©Øª](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
+            .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
         await interaction.editReply({ embeds: [successEmbed] });
         
@@ -1152,8 +1152,8 @@ async function handleSelectMenu(interaction, client, env) {
 
     if (customId === 'rating_input') {
         const rating = values[0];
-        const modal = new ModalBuilder().setCustomId(`review_comment_modal_${rating}`).setTitle('Ù†Ø¸Ø± Ø®ÙˆØ¯ Ø±Ø§ Ø¨Ù†ÙˆÛŒØ³ÛŒØ¯');
-        const commentInput = new TextInputBuilder().setCustomId('comment_input').setLabel('Ù†Ø¸Ø± Ø®ÙˆØ¯ Ø±Ø§ Ø¨Ù†ÙˆÛŒØ³ÛŒØ¯ (Ø§Ø®ØªÛŒØ§Ø±ÛŒ)').setStyle(TextInputStyle.Paragraph).setRequired(false);
+        const modal = new ModalBuilder().setCustomId(`review_comment_modal_${rating}`).setTitle('نظر خود را بنویسید');
+        const commentInput = new TextInputBuilder().setCustomId('comment_input').setLabel('نظر خود را بنویسید (اختیاری)').setStyle(TextInputStyle.Paragraph).setRequired(false);
         modal.addComponents(new ActionRowBuilder().addComponents(commentInput));
         await interaction.showModal(modal);
     }
@@ -1175,13 +1175,13 @@ async function handleModal(interaction, client, env) {
 
             const rating = customId.split('_')[3];
             const comment = fields.getTextInputValue('comment_input');
-            const stars = 'â­'.repeat(parseInt(rating));
+            const stars = '⭐'.repeat(parseInt(rating));
             const reviewChannel = guild.channels.cache.get(REVIEW_CHANNEL_ID);
 
             if (reviewChannel && reviewChannel.isTextBased()) {
                 const embed = new EmbedBuilder()
                     .setColor('Gold')
-                    .setTitle('â­ New Review Submitted â­')
+                    .setTitle('⭐ New Review Submitted ⭐')
                     .setAuthor({ name: user.username, iconURL: user.displayAvatarURL() })
                     .addFields({ name: 'Rating', value: stars, inline: true })
                     .setTimestamp();
@@ -1201,7 +1201,7 @@ async function handleModal(interaction, client, env) {
             // Only reply if not already replied
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: 'âŒ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
+                    await interaction.reply({ content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1217,7 +1217,7 @@ async function handleModal(interaction, client, env) {
                     CustomId: customId,
                     User: `${user.tag} (${user.id})`
                 });
-            else {
+            } else {
                 console.error('Error handling review modal:', err);
             }
         }
@@ -1236,7 +1236,7 @@ async function handleModal(interaction, client, env) {
 
             // Check if user already has a ticket
             if (db.tickets && db.tickets.has && db.tickets.has(user.id)) {
-                const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`âŒ You already have an open ticket: <#${db.tickets.get(user.id)}>`);
+                const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ You already have an open ticket: <#${db.tickets.get(user.id)}>`);
                 return interaction.editReply({ embeds: [errorEmbed] });
             }
 
@@ -1246,7 +1246,7 @@ async function handleModal(interaction, client, env) {
             
             const successEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setDescription(`ØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯!\n\nØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø§ Ø¬Ø²Ø¦ÛŒØ§Øª Ú©Ø§Ù…Ù„ Ø§ÛŒØ¬Ø§Ø¯ Ø´Ø¯. Ø¨Ø±Ø§ÛŒ Ø¯Ø³ØªØ±Ø³ÛŒ Ø³Ø±ÛŒØ¹ Ø¨Ù‡ ØªÛŒÚ©ØªØŒ Ø±ÙˆÛŒ Ù„ÛŒÙ†Ú© Ø²ÛŒØ± Ú©Ù„ÛŒÚ© Ú©Ù†ÛŒØ¯:\n\n[ðŸš€ Ø±ÙØªÙ† Ø¨Ù‡ ØªÛŒÚ©Øª](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
+                .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
             await interaction.editReply({ embeds: [successEmbed] });
             
@@ -1262,7 +1262,7 @@ async function handleModal(interaction, client, env) {
             // Only edit reply if deferred
             if (interaction.deferred && !interaction.replied) {
                 try {
-                    await interaction.editReply({ content: 'âŒ Error creating ticket.' });
+                    await interaction.editReply({ content: '❌ Error creating ticket.' });
                 } catch (replyErr) {
                     // If editReply fails, log it but don't throw
                     if (logger) {
@@ -1272,9 +1272,9 @@ async function handleModal(interaction, client, env) {
                         });
                     }
                 }
-            else if (!interaction.replied && !interaction.deferred) {
+            } else if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: 'âŒ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1309,7 +1309,7 @@ async function handleModal(interaction, client, env) {
             
             const successEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setDescription(`ØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯!\n\nØªÛŒÚ©Øª Ø´Ù…Ø§ Ø¨Ø§ Ø¬Ø²Ø¦ÛŒØ§Øª Ú©Ø§Ù…Ù„ Ø§ÛŒØ¬Ø§Ø¯ Ø´Ø¯. Ø¨Ø±Ø§ÛŒ Ø¯Ø³ØªØ±Ø³ÛŒ Ø³Ø±ÛŒØ¹ Ø¨Ù‡ ØªÛŒÚ©ØªØŒ Ø±ÙˆÛŒ Ù„ÛŒÙ†Ú© Ø²ÛŒØ± Ú©Ù„ÛŒÚ© Ú©Ù†ÛŒØ¯:\n\n[ðŸš€ Ø±ÙØªÙ† Ø¨Ù‡ ØªÛŒÚ©Øª](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
+                .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
             await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
             
@@ -1324,7 +1324,7 @@ async function handleModal(interaction, client, env) {
             // Only reply if not already replied
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: 'âŒ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1377,14 +1377,14 @@ async function handleModal(interaction, client, env) {
                 const embed = new EmbedBuilder()
                     .setColor(embedColor)
                     .setDescription(text)
-                    .setFooter({ text: `Ø§Ø±Ø³Ø§Ù„ Ø´Ø¯Ù‡ ØªÙˆØ³Ø· ${interaction.user.tag} Ø§Ø² Ø³Ø±ÙˆØ± ${guild.name}` })
+                    .setFooter({ text: `ارسال شده توسط ${interaction.user.tag} از سرور ${guild.name}` })
                     .setTimestamp();
 
                 if (embedTitle) {
                     embed.setTitle(embedTitle);
                 }
                 messageContent = { embeds: [embed] };
-            else {
+            } else {
                 messageContent = { content: text };
             }
 
@@ -1395,9 +1395,9 @@ async function handleModal(interaction, client, env) {
                 try {
                     await target.send(messageContent);
                     await interaction.editReply({
-                        content: `âœ… Message sent successfully to ${target.tag}.`
+                        content: `✅ Message sent successfully to ${target.tag}.`
                     });
-                    await logAction(guild, `ðŸ“© ${interaction.user.tag} Ù¾ÛŒØ§Ù…ÛŒ Ø¨Ù‡ Ú©Ø§Ø±Ø¨Ø± ${target.tag} Ø§Ø±Ø³Ø§Ù„ Ú©Ø±Ø¯.`);
+                    await logAction(guild, `📩 ${interaction.user.tag} پیامی به کاربر ${target.tag} ارسال کرد.`);
                     
                     if (logger) {
                         await logger.logModeration('Message Sent (DM)', interaction.user, target, {
@@ -1406,19 +1406,19 @@ async function handleModal(interaction, client, env) {
                         });
                     }
                 } catch (dmError) {
-                    throw new Error('Ø§Ù…Ú©Ø§Ù† Ø§Ø±Ø³Ø§Ù„ Ù¾ÛŒØ§Ù… Ø®ØµÙˆØµÛŒ Ø¨Ù‡ Ø§ÛŒÙ† Ú©Ø§Ø±Ø¨Ø± ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø±Ø¯. Ù…Ù…Ú©Ù† Ø§Ø³Øª DM Ú©Ø§Ø±Ø¨Ø± Ø¨Ø³ØªÙ‡ Ø¨Ø§Ø´Ø¯.');
+                    throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
                 }
-            else {
+            } else {
                 // If not a user, try to send to channel
                 const channel = await interaction.client.channels.fetch(targetId);
                 if (!channel) {
-                    throw new Error('Ù…Ù‚ØµØ¯ Ù¾ÛŒØ§Ù… ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§Ù‹ Ù…Ø·Ù…Ø¦Ù† Ø´ÙˆÛŒØ¯ Ú©Ù‡ Ø¢ÛŒØ¯ÛŒ Ú©Ø§Ø±Ø¨Ø± ÛŒØ§ Ú†Ù†Ù„ Ø¯Ø±Ø³Øª Ø§Ø³Øª.');
+                    throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
                 }
                 await channel.send(messageContent);
                 await interaction.editReply({
-                    content: `âœ… Message sent successfully to channel ${channel.name}.`
+                    content: `✅ Message sent successfully to channel ${channel.name}.`
                 });
-                await logAction(guild, `ðŸ“© ${interaction.user.tag} Ù¾ÛŒØ§Ù…ÛŒ Ø¯Ø± Ú©Ø§Ù†Ø§Ù„ ${channel.name} Ø§Ø±Ø³Ø§Ù„ Ú©Ø±Ø¯.`);
+                await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
                 
                 if (logger) {
                     await logger.logModeration('Message Sent (Channel)', interaction.user, 
@@ -1430,19 +1430,19 @@ async function handleModal(interaction, client, env) {
                 }
             }
         } catch (dmError) {
-            throw new Error('Ø§Ù…Ú©Ø§Ù† Ø§Ø±Ø³Ø§Ù„ Ù¾ÛŒØ§Ù… Ø®ØµÙˆØµÛŒ Ø¨Ù‡ Ø§ÛŒÙ† Ú©Ø§Ø±Ø¨Ø± ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø±Ø¯. Ù…Ù…Ú©Ù† Ø§Ø³Øª DM Ú©Ø§Ø±Ø¨Ø± Ø¨Ø³ØªÙ‡ Ø¨Ø§Ø´Ø¯.');
+            throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
         }
-    else {
+    } else {
         // If not a user, try to send to channel
         const channel = await interaction.client.channels.fetch(targetId);
         if (!channel) {
-            throw new Error('Ù…Ù‚ØµØ¯ Ù¾ÛŒØ§Ù… ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§Ù‹ Ù…Ø·Ù…Ø¦Ù† Ø´ÙˆÛŒØ¯ Ú©Ù‡ Ø¢ÛŒØ¯ÛŒ Ú©Ø§Ø±Ø¨Ø± ÛŒØ§ Ú†Ù†Ù„ Ø¯Ø±Ø³Øª Ø§Ø³Øª.');
+            throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
         }
         await channel.send(messageContent);
         await interaction.editReply({
-            content: `âœ… Message sent successfully to channel ${channel.name}.`
+            content: `✅ Message sent successfully to channel ${channel.name}.`
         });
-        await logAction(guild, `ðŸ“© ${interaction.user.tag} Ù¾ÛŒØ§Ù…ÛŒ Ø¯Ø± Ú©Ø§Ù†Ø§Ù„ ${channel.name} Ø§Ø±Ø³Ø§Ù„ Ú©Ø±Ø¯.`);
+        await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
         
         if (logger) {
             await logger.logModeration('Message Sent (Channel)', interaction.user, 
@@ -1456,23 +1456,10 @@ async function handleModal(interaction, client, env) {
 } catch (error) {
     console.error('Error in sendmessage modal:', error);
     await interaction.editReply({
-        content: `âŒ Error sending message: ${error.message}`
+        content: `❌ Error sending message: ${error.message}`
     });
-    else {
-        // Handle unknown button
-        // Check if interaction is already replied/deferred
-        if (interaction.replied || interaction.deferred) {
-            return;
-        }
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        console.log(`Unknown button clicked: customId='${interaction.customId}', user='${interaction.user.id}', guild='${interaction.guild.id}'`);
-        const errorEmbed = new EmbedBuilder()
-            .setColor('Red')
-            .setDescription(`âŒ Ø¯Ú©Ù…Ù‡ Ù†Ø§Ù…Ø´Ø®Øµ: ${customId}`);
-        await interaction.editReply({ embeds: [errorEmbed] });
-    }
 }
-
+}
 
 module.exports = {
     handleButton,
