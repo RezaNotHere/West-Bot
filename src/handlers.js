@@ -1440,30 +1440,6 @@ async function handleModal(interaction, client, env) {
             
             return; // Don't send the actual ads yet
 
-            const resultEmbed = new EmbedBuilder()
-                .setColor(successCount > 0 ? 'Green' : 'Red')
-                .setTitle('📊 Advertisement Results')
-                .setDescription(`Advertisement sent to **${targetRole.name}** role members!`)
-                .addFields(
-                    { name: '✅ Successfully Sent', value: `${successCount} members`, inline: true },
-                    { name: '❌ Failed', value: `${failCount} members`, inline: true },
-                    { name: '👥 Total Targeted', value: `${membersWithRole.size} members`, inline: true }
-                )
-                .setTimestamp();
-
-            await interaction.editReply({ embeds: [resultEmbed] }); // Remove ephemeral flag
-
-            if (logger) {
-                await logger.logInfo('Advertisement Sent', {
-                    Sender: `${interaction.user.tag} (${interaction.user.id})`,
-                    TargetRole: targetRole.name,
-                    SuccessCount: successCount,
-                    FailCount: failCount,
-                    TotalTargeted: membersWithRole.size,
-                    Guild: guild.name
-                });
-            }
-
         } catch (err) {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
@@ -1590,11 +1566,86 @@ async function handleAdvertisementButtons(interaction, client, env) {
     }
     
     if (customId === 'advertise_edit') {
-        await interaction.update({
-            content: '✏️ Please run the /advertise command again to edit your advertisement.',
-            embeds: [],
-            components: []
-        });
+        // Find the most recent advertisement data for this user
+        let adData = null;
+        let confirmId = null;
+        
+        if (global.tempAdData) {
+            for (const [id, data] of global.tempAdData.entries()) {
+                // This is a simple approach - you could store user ID with the data for better matching
+                adData = data;
+                confirmId = id;
+                break;
+            }
+        }
+        
+        if (!adData) {
+            await interaction.update({
+                content: '❌ No advertisement data found to edit. Please run the /advertise command again.',
+                embeds: [],
+                components: []
+            });
+            return;
+        }
+        
+        // Create a new modal with the existing data
+        const modal = new ModalBuilder()
+            .setCustomId(`advertise_modal_${adData.targetRoleId}_${adData.color}`)
+            .setTitle(`Edit Advertisement for ${guild.roles.cache.get(adData.targetRoleId)?.name || 'Unknown Role'}`)
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_title')
+                        .setLabel('Advertisement Title')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('Enter your advertisement title...')
+                        .setRequired(true)
+                        .setMaxLength(256)
+                        .setValue(adData.title || '')
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_message')
+                        .setLabel('Advertisement Message')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Enter your advertisement message...')
+                        .setRequired(true)
+                        .setMaxLength(2000)
+                        .setValue(adData.message || '')
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_button_text')
+                        .setLabel('Button Text (Optional)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('e.g., Visit Shop, Learn More...')
+                        .setRequired(false)
+                        .setMaxLength(80)
+                        .setValue(adData.buttonText || '')
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_button_link')
+                        .setLabel('Button Link (Optional)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('https://example.com')
+                        .setRequired(false)
+                        .setMaxLength(500)
+                        .setValue(adData.buttonLink || '')
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_image_url')
+                        .setLabel('Image URL (Optional)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('https://example.com/image.jpg')
+                        .setRequired(false)
+                        .setMaxLength(500)
+                        .setValue(adData.imageUrl || '')
+                )
+            );
+        
+        await interaction.showModal(modal);
         return;
     }
     
@@ -1698,6 +1749,7 @@ async function handleAdvertisementButtons(interaction, client, env) {
                 .setTimestamp();
             
             await interaction.editReply({ 
+                content: `✅ **Advertisement Successfully Sent!**\n\nYour advertisement has been sent to **${targetRole.name}** role members.`,
                 embeds: [resultEmbed],
                 components: []
             });
