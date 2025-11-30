@@ -103,6 +103,14 @@ const commandLogger_ins = new (require('./src/commandLogger'))();
 
 // Event: Ready
 client.once(Events.ClientReady, async () => {
+    // 🚫 Prevent duplicate startup screens
+    if (global.startupExecuted) {
+        console.log('🔄 Startup already executed, skipping...');
+        return;
+    }
+    global.startupExecuted = true;
+    
+    // 🧹 Clear console only once
     console.clear();
     
     // 🎨 ASCII Art Banner
