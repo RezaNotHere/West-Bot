@@ -18,6 +18,24 @@ const InteractionUtils = require('./utils/InteractionUtils');
 const config = require('../configManager');
 const { ValidationError, PermissionError } = require('./errors/BotError');
 
+// Safe interaction reply helper
+async function safeReply(interaction, options) {
+    try {
+        if (interaction.replied || interaction.deferred) {
+            return await interaction.followUp(options);
+        } else {
+            return await interaction.reply(options);
+        }
+    } catch (error) {
+        if (error.code === 10062) {
+            console.warn('⚠️ Interaction expired or already handled:', error.message);
+        } else {
+            console.error('❌ Interaction reply failed:', error);
+        }
+        return null;
+    }
+}
+
 // Conditional imports for security modules (may not exist in production)
 let InputValidator = null;
 let SecurityCommands = null;
@@ -218,7 +236,7 @@ async function handleSlashCommand(interaction) {
             .setTitle('📝 List of Banned Words')
             .setDescription(list.length ? list.join(', ') : 'List is empty.')
             .setTimestamp();
-        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -281,7 +299,7 @@ async function handleSlashCommand(interaction) {
                 });
             }
             
-            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
             
             // Log the import action
             if (logger) {
@@ -433,7 +451,7 @@ async function handleSlashCommand(interaction) {
             
             db.giveaways.set(msg.id, giveawayData);
             
-            await interaction.reply({ content: `Giveaway created successfully! [View](${msg.url})`, flags: MessageFlags.Ephemeral });
+            await InteractionUtils.sendSuccess(interaction, `Giveaway created successfully! [View](${msg.url})`);
             utils.checkGiveaways();
             return;
         } catch (error) {
@@ -1266,7 +1284,7 @@ async function handleSlashCommand(interaction) {
                 .setDescription('No cards found in the database.')
                 .setTimestamp();
             
-            return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            return await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
         }
 
         const embed = new EmbedBuilder()
@@ -1285,7 +1303,7 @@ async function handleSlashCommand(interaction) {
             });
         });
 
-        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
         return;
     }
 
