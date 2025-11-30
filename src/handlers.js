@@ -354,30 +354,48 @@ async function handleButton(interaction, client, env) {
         ]);
 
         // Disable admin buttons when ticket is claimed
-        const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
-        if (originalMessage && originalMessage.components.length > 0) {
-            const disabledAdminButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('record_order_admin')
-                    .setLabel('📝 Record Order')
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId('complete_purchase_admin')
-                    .setLabel('✅ Complete Purchase')
-                    .setStyle(ButtonStyle.Success)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId('claim_ticket')
-                    .setLabel('Already Claimed')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(true)
+            const messages = await channel.messages.fetch({ limit: 10 });
+            const originalMessage = messages.find(msg => 
+                msg.components.length > 0 && 
+                msg.components.some(row => 
+                    row.components.some(btn => 
+                        btn.customId === 'close_ticket_user' || 
+                        btn.customId === 'complete_purchase'
+                    )
+                )
             );
+            
+            if (originalMessage) {
+                console.log(`🔄 Found ticket creation message for claim: ${originalMessage.id}`);
+                
+                const disabledAdminButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('record_order_admin')
+                        .setLabel('📝 Record Order')
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(true),
+                    new ButtonBuilder()
+                        .setCustomId('complete_purchase_admin')
+                        .setLabel('✅ Complete Purchase')
+                        .setStyle(ButtonStyle.Success)
+                        .setDisabled(true),
+                    new ButtonBuilder()
+                        .setCustomId('claim_ticket')
+                        .setLabel('👋 Claim Ticket (Already Claimed)')
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true)
+                );
 
-            await originalMessage.edit({
-                components: [originalMessage.components[0], disabledAdminButtons]
-            });
-        }
+                await originalMessage.edit({
+                    content: originalMessage.content,
+                    embeds: originalMessage.embeds,
+                    components: [originalMessage.components[0], disabledAdminButtons]
+                });
+                
+                console.log('✅ Admin buttons disabled successfully after claim');
+            } else {
+                console.log('❌ Could not find ticket creation message to disable buttons');
+            }
 
         await interaction.editReply({
             embeds: [
@@ -747,59 +765,72 @@ async function handleButton(interaction, client, env) {
             return;
         }
         
-        // Defer reply with error handling
-        try {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        } catch (err) {
-            // If defer fails, interaction has expired
-            console.log('Interaction expired for ticket_delete');
-            return;
-        }
+        // Quick reply first, then process deletion in background
+        const processingEmbed = new EmbedBuilder()
+            .setColor('Yellow')
+            .setDescription('⏳ در حال حذف تیکت...');
+        await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
 
-        const ticketInfo = db.ticketInfo.get(channel.id);
-        if (!ticketInfo) {
-            const errorEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setDescription('❌ Ticket information not found.');
-            return interaction.editReply({ embeds: [errorEmbed] });
-        }
-
-        // Send final message
-        const deleteEmbed = new EmbedBuilder()
-            .setColor('Red')
-            .setTitle('🗑️ تیکت حذف شد')
-            .setDescription(`تیکت توسط ${user.tag} حذف شد.`)
-            .setTimestamp();
-        await channel.send({ embeds: [deleteEmbed] });
-
-        // Delete ticket from database
-        if (db.tickets && db.tickets.delete) {
-            db.tickets.delete(ticketInfo.ownerId);
-        }
-        if (db.ticketInfo && db.ticketInfo.delete) {
-            db.ticketInfo.delete(channel.id);
-        }
-
-        await interaction.editReply({
-            content: '✅ Ticket deleted successfully. This channel will be deleted in 5 seconds.'
-        });
-
-        // Wait a moment for the edit reply to complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        await logAction(guild, `🗑️ Ticket ${channel.name} deleted by ${user.tag}.`);
-        
-        if (logger) {
-            await logger.logTicket('Deleted', user, {
-                TicketChannel: `${channel.name} (${channel.id})`,
-                DeletedBy: `${user.tag} (${user.id})`,
-                Owner: `<@${ticketInfo.ownerId}>`
-            });
-        }
-
-        // Delete channel and its category after 5 seconds
-        setTimeout(async () => {
+        // Process deletion in background
+        setImmediate(async () => {
             try {
+                const ticketInfo = db.ticketInfo.get(channel.id);
+                if (!ticketInfo) {
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor('Red')
+                        .setDescription('❌ اطلاعات تیکت پیدا نشد.');
+                    return interaction.editReply({ embeds: [errorEmbed] });
+                }
+
+                // Send final message before deletion
+                const deleteEmbed = new EmbedBuilder()
+                    .setColor('Red')
+                    .setTitle('🗑️ تیکت حذف شد')
+                    .setDescription(`تیکت توسط ${user.tag} حذف شد.`)
+                    .setTimestamp();
+                await channel.send({ embeds: [deleteEmbed] });
+
+                // Delete ticket from database
+                db.ticketInfo.delete(channel.id);
+                if (db.tickets && db.tickets.has && db.tickets.has(ticketInfo.ownerId)) {
+                    db.tickets.delete(ticketInfo.ownerId);
+                }
+
+                // Add delay before channel deletion to prevent timeout
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Delete the channel
+                await channel.delete('Ticket deleted by admin');
+
+                // Update interaction to show completion
+                const successEmbed = new EmbedBuilder()
+                    .setColor('Green')
+                    .setDescription('✅ تیکت با موفقیت حذف شد.');
+                await interaction.editReply({ embeds: [successEmbed] });
+
+                // Background logging (non-blocking)
+                setImmediate(async () => {
+                    await logAction(guild, `🗑️ Ticket ${channel.name} deleted by ${user.tag}.`);
+                    
+                    if (logger) {
+                        await logger.logTicket('Deleted', user, {
+                            TicketChannel: `${channel.name} (${channel.id})`,
+                            TicketOwner: `<@${ticketInfo.ownerId}>`,
+                            Reason: ticketInfo.reason || 'N/A'
+                        });
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error deleting ticket:', error);
+                const errorEmbed = new EmbedBuilder()
+                    .setColor('Red')
+                    .setDescription('❌ خطا در حذف تیکت. لطفاً دوباره تلاش کنید.');
+                await interaction.editReply({ embeds: [errorEmbed] });
+            }
+        });
+    }
+    else if (customId === 'complete_purchase') {
                 const parentCategory = channel.parent;
                 await channel.delete();
                 
