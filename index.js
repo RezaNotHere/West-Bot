@@ -250,6 +250,14 @@ client.once(Events.ClientReady, async () => {
         // Silent error handling for startup notification
     }
 
+    // Set client for logger to enable channel logging
+    logger.setClient(client);
+    
+    // Set client for utils and start giveaway checker
+    const utils = require('./src/utils');
+    utils.setClient(client);
+    utils.checkGiveaways();
+
     // 🚀 Auto-update slash commands on startup
     console.log('\x1b[96m🔄 Updating slash commands...');
     try {
@@ -269,14 +277,6 @@ client.once(Events.ClientReady, async () => {
             console.log('\x1b[91m❌ [AUTO] Error updating slash commands:', error.message, '\x1b[0m');
         }
     }, 24 * 60 * 60 * 1000); // 24 hours
-
-    // Set client for logger to enable channel logging
-    logger.setClient(client);
-    
-    // Set client for utils and start giveaway checker
-    const utils = require('./src/utils');
-    utils.setClient(client);
-    utils.checkGiveaways();
     
     // Check giveaways every 3 seconds
     setInterval(() => {
