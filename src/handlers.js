@@ -964,6 +964,116 @@ async function handleButton(interaction, client, env) {
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
+    else if (customId === 'reopen_ticket') {
+        console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const ticketInfo = db.ticketInfo.get(channel.id);
+        if (!ticketInfo) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ اطلاعات تیکت پیدا نشد.');
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        try {
+            // Quick reply first, then process in background
+            const processingEmbed = new EmbedBuilder()
+                .setColor('Yellow')
+                .setDescription('⏳ در حال باز کردن تیکت...');
+            await interaction.editReply({ embeds: [processingEmbed] });
+
+            // Process all operations in parallel for speed
+            await Promise.all([
+                // Move ticket back to original category
+                ticketInfo.originalCategory ? channel.setParent(ticketInfo.originalCategory) : Promise.resolve(),
+                
+                // Restore permissions for ticket owner
+                channel.permissionOverwrites.edit(ticketInfo.ownerId, {
+                    SendMessages: true,
+                    ViewChannel: true,
+                    ReadMessageHistory: true
+                }),
+                
+                // Update ticket info
+                db.ticketInfo.set(channel.id, { 
+                    ...ticketInfo, 
+                    status: 'open', 
+                    reopenedBy: user.id, 
+                    reopenedAt: Date.now()
+                })
+            ]);
+
+            // Restore original buttons
+            const userButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('complete_purchase').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('close_ticket_user').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
+            );
+
+            const adminButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('record_order_admin').setLabel('📝 Record Order').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
+            );
+
+            // Find the ticket message with reopen/transcript buttons
+            const messages = await channel.messages.fetch({ limit: 10 });
+            const originalMessage = messages.find(msg => 
+                msg.components.length > 0 && 
+                msg.components.some(row => 
+                    row.components.some(btn => 
+                        btn.customId === 'reopen_ticket' || 
+                        btn.customId === 'create_transcript'
+                    )
+                )
+            );
+            
+            if (originalMessage) {
+                console.log(`🔄 Found closed ticket message: ${originalMessage.id}`);
+                await originalMessage.edit({
+                    content: originalMessage.content,
+                    embeds: originalMessage.embeds,
+                    components: [userButtons, adminButtons]
+                });
+                
+                console.log('✅ Ticket buttons restored successfully after reopening');
+            } else {
+                console.log('❌ Could not find closed ticket message to restore buttons');
+            }
+
+            // Final success message
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setDescription('✅ تیکت با موفقیت مجدداً باز شد.');
+
+            await interaction.editReply({ embeds: [successEmbed] });
+            
+            // Background logging (non-blocking)
+            setImmediate(async () => {
+                await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
+                
+                if (logger) {
+                    await logger.logTicket('Reopened', user, {
+                        TicketChannel: `${channel.name} (${channel.id})`,
+                        ReopenedBy: `${user.tag} (${user.id})`,
+                        Owner: `<@${ticketInfo.ownerId}>`
+                    });
+                }
+            });
+
+        } catch (error) {
+            console.error('Error reopening ticket:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
     else {
         // Handle unknown button
         // Check if interaction is already replied/deferred
@@ -1349,116 +1459,6 @@ async function handleModal(interaction, client, env) {
         content: `❌ Error sending message: ${error.message}`
     });
 }
-    }
-    else if (customId === 'reopen_ticket') {
-        console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
-        // Check if interaction is already replied/deferred
-        if (interaction.replied || interaction.deferred) {
-            console.log('⚠️ Interaction already replied/deferred');
-        }
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const ticketInfo = db.ticketInfo.get(channel.id);
-        if (!ticketInfo) {
-            const errorEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setDescription('❌ اطلاعات تیکت پیدا نشد.');
-            return interaction.editReply({ embeds: [errorEmbed] });
-        }
-
-        try {
-            // Quick reply first, then process in background
-            const processingEmbed = new EmbedBuilder()
-                .setColor('Yellow')
-                .setDescription('⏳ در حال باز کردن تیکت...');
-            await interaction.editReply({ embeds: [processingEmbed] });
-
-            // Process all operations in parallel for speed
-            await Promise.all([
-                // Move ticket back to original category
-                ticketInfo.originalCategory ? channel.setParent(ticketInfo.originalCategory) : Promise.resolve(),
-                
-                // Restore permissions for ticket owner
-                channel.permissionOverwrites.edit(ticketInfo.ownerId, {
-                    SendMessages: true,
-                    ViewChannel: true,
-                    ReadMessageHistory: true
-                }),
-                
-                // Update ticket info
-                db.ticketInfo.set(channel.id, { 
-                    ...ticketInfo, 
-                    status: 'open', 
-                    reopenedBy: user.id, 
-                    reopenedAt: Date.now()
-                })
-            ]);
-
-            // Restore original buttons
-            const userButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('complete_purchase').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('close_ticket_user').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
-            );
-
-            const adminButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('record_order_admin').setLabel('📝 Record Order').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
-            );
-
-            // Find the ticket message with reopen/transcript buttons
-            const messages = await channel.messages.fetch({ limit: 10 });
-            const originalMessage = messages.find(msg => 
-                msg.components.length > 0 && 
-                msg.components.some(row => 
-                    row.components.some(btn => 
-                        btn.customId === 'reopen_ticket' || 
-                        btn.customId === 'create_transcript'
-                    )
-                )
-            );
-            
-            if (originalMessage) {
-                console.log(`🔄 Found closed ticket message: ${originalMessage.id}`);
-                await originalMessage.edit({
-                    content: originalMessage.content,
-                    embeds: originalMessage.embeds,
-                    components: [userButtons, adminButtons]
-                });
-                
-                console.log('✅ Ticket buttons restored successfully after reopening');
-            } else {
-                console.log('❌ Could not find closed ticket message to restore buttons');
-            }
-
-            // Final success message
-            const successEmbed = new EmbedBuilder()
-                .setColor('Green')
-                .setDescription('✅ تیکت با موفقیت مجدداً باز شد.');
-
-            await interaction.editReply({ embeds: [successEmbed] });
-            
-            // Background logging (non-blocking)
-            setImmediate(async () => {
-                await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
-                
-                if (logger) {
-                    await logger.logTicket('Reopened', user, {
-                        TicketChannel: `${channel.name} (${channel.id})`,
-                        ReopenedBy: `${user.tag} (${user.id})`,
-                        Owner: `<@${ticketInfo.ownerId}>`
-                    });
-                }
-            });
-
-        } catch (error) {
-            console.error('Error reopening ticket:', error);
-            const errorEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
-            await interaction.editReply({ embeds: [errorEmbed] });
-        }
-    }
     else {
         // Handle unknown button
         // Check if interaction is already replied/deferred
