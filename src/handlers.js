@@ -190,76 +190,69 @@ async function handleButton(interaction, client, env) {
                 ReadMessageHistory: true
             });
 
-            // Send close message with embed
+            // Send confirmation message
             const closeEmbed = new EmbedBuilder()
-                .setColor('#E74C3C')
+                .setColor('#FFA500')
                 .setTitle('🔒 تیکت بسته شد')
-                .setDescription(`این تیکت توسط <@${user.id}> بسته شد.\n\nشما می‌توانید تاریخچه پیام‌ها را مشاهده کنید اما امکان ارسال پیام جدید وجود ندارد.\n\nبرای باز کردن مجدد تیکت، از دکمه "باز کردن مجدد" استفاده کنید.`)
+                .setDescription(`تیکت شما بسته شد. اگر نیاز به کمک بیشتری دارید، لطفاً تیکت جدیدی باز کنید.\n\nتیکت به آرشیو منتقل شد و دیگر نمی‌توانید در آن پیام ارسال کنید.`)
                 .addFields(
-                    { name: '👤 بسته شده توسط', value: `<@${user.id}>`, inline: true },
-                    { name: '⏰ زمان بسته شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                    { name: 'بسته شده توسط', value: `${user.tag}`, inline: true },
+                    { name: 'زمان بسته شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
                 )
-                .setFooter({ text: 'سیستم تیکت' })
+                .setFooter({ text: 'با تشکر از تماس شما' })
                 .setTimestamp();
 
             await channel.send({ embeds: [closeEmbed] });
 
-            // Update ticket status to closed
-            if (db.ticketInfo && db.ticketInfo.set) {
-                db.ticketInfo.set(channel.id, {
-                    ...ticketInfo,
-                    status: 'closed',
-                    closedBy: user.id,
-                    closedAt: Date.now(),
-                    originalParentId: originalParent?.id // Store for reopening
+            // Log ticket close
+            if (logger) {
+                await logger.logTicket('Closed', user, {
+                    TicketChannel: `${channel.name} (${channel.id})`,
+                    TicketOwner: `<@${ticketInfo.ownerId}>`,
+                    Reason: ticketInfo.reason || 'N/A',
+                    ClosedBy: `${user.tag} (${user.id})`
                 });
             }
 
-            // Replace original buttons with closed ticket buttons
-            try {
-                const messages = await channel.messages.fetch({ limit: 10 });
-                const ticketMessage = messages.find(msg =>
-                    msg.author.id === client.user.id &&
-                    (msg.embeds[0]?.title?.includes('Ticket') || msg.components?.length > 0) &&
-                    msg.components?.length > 0
-                );
+            // Update ticket info
+            db.ticketInfo.set(channel.id, { 
+                ...ticketInfo, 
+                status: 'closed', 
+                closedBy: user.id, 
+                closedAt: Date.now(),
+                originalCategory: originalParent?.id
+            });
 
-                if (ticketMessage) {
-                    // Replace with closed ticket action buttons
-                    const actionRow = transcript.createTicketActionRow();
-                    await ticketMessage.edit({
-                        embeds: ticketMessage.embeds,
-                        components: [actionRow]
-                    });
-                }
-            } catch (replaceError) {
-                console.error('Error replacing ticket buttons:', replaceError);
-            }
+            await interaction.editReply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor('Green')
+                        .setTitle('✅ تیکت با موفقیت بسته شد')
+                        .setDescription(`تیکت ${channel.name} با موفقیت بسته شد و به آرشیو منتقل گردید.`)
+                        .setTimestamp()
+                ]
+            });
 
-            // Send success message to user
-            const successEmbed = new EmbedBuilder()
-                .setColor('#2ECC71')
-                .setDescription('✅ تیکت با موفقیت بسته شد و به بخش تیکت‌های بسته منتقل گردید.');
-
-            await interaction.editReply({ embeds: [successEmbed] });
-            await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag} and moved to Closed Tickets.`);
+            await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
             
-            if (logger) {
-                await logger.logSuccess('Ticket Closed', {
-                    Ticket: `${channel.name} (${channel.id})`,
-                    ClosedBy: `${user.tag} (${user.id})`,
-                    Owner: `<@${ticketInfo.ownerId}>`,
-                    Reason: ticketInfo.reason || 'N/A'
-                }, 'Ticket System');
-            }
-
         } catch (error) {
-            // Only edit reply if we successfully deferred
-            if (interaction.deferred && !interaction.replied) {
+            console.error('Error closing ticket:', error);
+            
+            // Comprehensive error handling for interaction states
+            if (!interaction.replied && !interaction.deferred) {
+                try {
+                    await interaction.reply({
+                        content: '❌ خطایی در بستن تیکت رخ داد.',
+                        flags: MessageFlags.Ephemeral
+                    });
+                } catch (replyError) {
+                    console.error('Failed to reply to interaction:', replyError);
+                }
+            } else if (interaction.deferred) {
                 try {
                     const errorEmbed = new EmbedBuilder()
                         .setColor('Red')
-                        .setDescription('❌ Error closing ticket. Please try again.');
+                        .setDescription('❌ خطایی در بستن تیکت رخ داد.');
                     await interaction.editReply({ embeds: [errorEmbed] });
                 } catch (replyErr) {
                     // If edit fails, log it but don't throw
@@ -701,6 +694,9 @@ async function handleButton(interaction, client, env) {
         await interaction.editReply({
             content: '✅ Ticket deleted successfully. This channel will be deleted in 5 seconds.'
         });
+
+        // Wait a moment for the edit reply to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         await logAction(guild, `🗑️ Ticket ${channel.name} deleted by ${user.tag}.`);
         
