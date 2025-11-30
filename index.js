@@ -209,15 +209,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         // Handle different interaction types
-        if (interaction.isChatInputCommand()) {
-            await commandLogger_ins.logCommand(interaction);
-            await commands.handleSlashCommand(interaction);
-        } else if (interaction.isButton()) {
-            await handlers.handleButton(interaction, client, config);
-        } else if (interaction.isStringSelectMenu()) {
-            await handlers.handleSelectMenu(interaction, client);
-        } else if (interaction.isModalSubmit()) {
-            await handlers.handleModalSubmit(interaction, client);
+        try {
+            if (interaction.isChatInputCommand()) {
+                await commandLogger_ins.logCommand(interaction);
+                await commands.handleSlashCommand(interaction);
+            } else if (interaction.isButton()) {
+                await handlers.handleButton(interaction, client, config);
+            } else if (interaction.isStringSelectMenu()) {
+                await handlers.handleSelectMenu(interaction, client);
+            } else if (interaction.isModalSubmit()) {
+                await handlers.handleModalSubmit(interaction, client);
+            }
+        } catch (interactionError) {
+            // Handle Discord API errors gracefully
+            if (interactionError.code === 10062) { // Unknown interaction
+                console.warn('⚠️ Interaction expired or already handled:', interactionError.message);
+            } else if (interactionError.code === 10008) { // Unknown member
+                console.warn('⚠️ Member not found:', interactionError.message);
+            } else if (interactionError.code === 10013) { // Unknown user
+                console.warn('⚠️ User not found:', interactionError.message);
+            } else {
+                // Log other errors normally
+                console.error('❌ Interaction handling error:', interactionError);
+            }
         }
     } catch (error) {
         await logger.logError(error, 'Interaction Handler', {
