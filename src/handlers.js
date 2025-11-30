@@ -19,7 +19,7 @@ async function handleButton(interaction, client, env) {
     console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
     
     // Handle advertisement buttons
-    if (interaction.customId.startsWith('advertise_')) {
+    if (interaction.customId.startsWith('adv_') || interaction.customId.startsWith('advertise_')) {
         return await handleAdvertisementButtons(interaction, client, env);
     }
     
@@ -1408,7 +1408,7 @@ async function handleModal(interaction, client, env) {
             };
             
             // Store data temporarily with a unique ID
-            const confirmId = `advertise_confirm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const confirmId = `adv_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
             
             // Store data in a temporary map (you could use a database for persistence)
             if (!global.tempAdData) global.tempAdData = new Map();
@@ -1598,7 +1598,7 @@ async function handleAdvertisementButtons(interaction, client, env) {
         return;
     }
     
-    if (customId.startsWith('advertise_confirm_')) {
+    if (customId.startsWith('adv_')) {
         try {
             await interaction.deferUpdate();
             
