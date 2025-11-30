@@ -1,7 +1,7 @@
 // index.js
 // 🔧 All configuration is now in config.json (loaded via configManager.js) - NO .env file needed!
 console.log('[DEBUG] index.js started');
-const { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, Partials } = require('discord.js');
 const config = require('./configManager');
 const { db, dbManager } = require('./src/database');
 const utils = require('./src/utils');
