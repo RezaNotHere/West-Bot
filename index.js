@@ -9,8 +9,18 @@ const commands = require('./src/commands');
 const events = require('./src/events');
 const handlers = require('./src/handlers');
 const LoggerUtils = require('./src/utils/LoggerUtils');
-const EnhancedSecurityManager = require('./src/security/EnhancedSecurityManager');
-const OptimizedSecurityManager = require('./src/security/OptimizedSecurityManager');
+
+// Conditional imports for security modules (may not exist in production)
+let EnhancedSecurityManager = null;
+let OptimizedSecurityManager = null;
+
+try {
+    EnhancedSecurityManager = require('./src/security/EnhancedSecurityManager');
+    OptimizedSecurityManager = require('./src/security/OptimizedSecurityManager');
+} catch (error) {
+    console.warn('Security modules not found:', error.message);
+}
+
 const commandLogger = require('./src/commandLogger');
 
 // ✅ Validate configuration before starting
@@ -23,11 +33,16 @@ const logger = new LoggerUtils({
     debug: config.server.environment !== 'production'
 });
 
-// Initialize optimized security manager
-const securityManager = new OptimizedSecurityManager({
-    adminIds: config.security?.adminIds || []
-});
-console.log('🛡️ Security System Initialized');
+// Initialize optimized security manager only if module exists
+let securityManager = null;
+if (OptimizedSecurityManager) {
+    securityManager = new OptimizedSecurityManager({
+        adminIds: config.security?.adminIds || []
+    });
+    console.log('🛡️ Security System Initialized');
+} else {
+    console.log('⚠️ Security System Disabled - modules not found');
+}
 
 // Print configuration (only in debug mode)
 if (config.server.debug) {
@@ -78,9 +93,13 @@ function updateBotStatus() {
 utils.setClient(client);
 utils.setLogger(logger);
 commands.setLogger(logger);
-commands.setSecurity(securityManager);
+if (securityManager) {
+    commands.setSecurity(securityManager);
+}
 handlers.setLogger(logger);
-handlers.setSecurity(securityManager);
+if (securityManager) {
+    handlers.setSecurity(securityManager);
+}
 handlers.setConfig(config);
 events.setLogger(logger);
 
@@ -121,18 +140,23 @@ client.once(Events.ClientReady, async () => {
 // Event: Interaction (Slash Commands) with enhanced security
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
-        // Enhanced security check
-        const securityCheck = await securityManager.checkInteractionSecurity(interaction);
-        if (!securityCheck.allowed) {
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ 
-                    content: securityCheck.message || 'Access denied',
-                    flags: MessageFlags.Ephemeral
-                });
-            } else {
-                await InteractionUtils.sendError(interaction, securityCheck.message || 'Access denied', false);
+        // Enhanced security check only if security manager exists
+        if (securityManager) {
+            const securityCheck = await securityManager.checkInteractionSecurity(interaction);
+            if (!securityCheck.allowed) {
+                if (interaction.replied || interaction.deferred) {
+                    await interaction.followUp({ 
+                        content: securityCheck.message || 'Access denied',
+                        flags: MessageFlags.Ephemeral
+                    });
+                } else {
+                    await interaction.reply({ 
+                        content: securityCheck.message || 'Access denied',
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+                return;
             }
-            return;
         }
 
         // Handle different interaction types
