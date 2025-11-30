@@ -791,6 +791,17 @@ async function handleButton(interaction, client, env) {
                     .setTimestamp();
                 await channel.send({ embeds: [deleteEmbed] });
 
+                // Update interaction BEFORE deleting channel
+                try {
+                    const successEmbed = new EmbedBuilder()
+                        .setColor('Green')
+                        .setDescription('✅ تیکت با موفقیت حذف شد.');
+                    await interaction.editReply({ embeds: [successEmbed] });
+                } catch (interactionError) {
+                    console.log('Interaction expired before channel deletion, but continuing...');
+                    // Continue with deletion even if interaction fails
+                }
+
                 // Delete ticket from database
                 db.ticketInfo.delete(channel.id);
                 if (db.tickets && db.tickets.has && db.tickets.has(ticketInfo.ownerId)) {
@@ -800,14 +811,8 @@ async function handleButton(interaction, client, env) {
                 // Add delay before channel deletion to prevent timeout
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
-                // Delete the channel
+                // Delete the channel (after interaction is updated)
                 await channel.delete('Ticket deleted by admin');
-
-                // Update interaction to show completion
-                const successEmbed = new EmbedBuilder()
-                    .setColor('Green')
-                    .setDescription('✅ تیکت با موفقیت حذف شد.');
-                await interaction.editReply({ embeds: [successEmbed] });
 
                 // Background logging (non-blocking)
                 setImmediate(async () => {
