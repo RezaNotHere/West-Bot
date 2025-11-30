@@ -23,8 +23,10 @@ let OptimizedSecurityManager = null;
 try {
     EnhancedSecurityManager = require('./src/security/EnhancedSecurityManager');
     OptimizedSecurityManager = require('./src/security/OptimizedSecurityManager');
+    console.log('✅ Security modules loaded successfully');
 } catch (error) {
-    console.warn('Security modules not found:', error.message);
+    console.warn('⚠️ Security modules not found:', error.message);
+    console.log('🔄 Bot will continue without security features');
 }
 
 const commandLogger = require('./src/commandLogger');
