@@ -1319,19 +1319,6 @@ async function handleModal(interaction, client, env) {
                     });
                 }
             }
-        } catch (error) {
-            console.error('Error in sendmessage modal:', error);
-            await interaction.editReply({
-                content: `✅ Message sent successfully to ${target.tag}.`
-            });
-            await logAction(guild, `📩 ${interaction.user.tag} پیامی به کاربر ${target.tag} ارسال کرد.`);
-            
-            if (logger) {
-                await logger.logModeration('Message Sent (DM)', interaction.user, target, {
-                    MessageType: useEmbed ? 'Embed' : 'Text',
-                    Color: color
-                });
-            }
         } catch (dmError) {
             throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
         }
@@ -1361,6 +1348,7 @@ async function handleModal(interaction, client, env) {
     await interaction.editReply({
         content: `❌ Error sending message: ${error.message}`
     });
+}
     else if (customId === 'reopen_ticket') {
         console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
