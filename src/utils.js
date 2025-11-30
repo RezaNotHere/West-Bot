@@ -56,10 +56,40 @@ function loadBadWords() {
         // Load all banned words from database
         badWords.clear();
         
-        // Use enmap's direct iteration instead of fetchEverything
-        for (const [word, value] of db.bannedWords) {
-            if (value) {
-                badWords.add(word);
+        // Try different iteration methods
+        try {
+            // Method 1: Direct iteration
+            for (const [word, value] of db.bannedWords) {
+                if (value) {
+                    badWords.add(word);
+                }
+            }
+        } catch (iterError) {
+            console.log('⚠️ Direct iteration failed, trying alternative method...');
+            
+            // Method 2: Using keys() and get()
+            try {
+                const keys = db.bannedWords.keys();
+                for (const word of keys) {
+                    const value = db.bannedWords.get(word);
+                    if (value) {
+                        badWords.add(word);
+                    }
+                }
+            } catch (keysError) {
+                console.log('⚠️ Keys method failed, trying forEach...');
+                
+                // Method 3: Using forEach
+                try {
+                    db.bannedWords.forEach((value, word) => {
+                        if (value) {
+                            badWords.add(word);
+                        }
+                    });
+                } catch (forEachError) {
+                    console.log('⚠️ All iteration methods failed, database might not be ready');
+                    return;
+                }
             }
         }
         
