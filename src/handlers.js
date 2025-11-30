@@ -206,25 +206,6 @@ async function handleButton(interaction, client, env) {
                 })
             ]);
 
-            // Update original message with new buttons for closed ticket
-            const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
-            if (originalMessage && originalMessage.components.length > 0) {
-                const closedTicketButtons = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('reopen_ticket')
-                        .setLabel('🔓 باز کردن تیکت')
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId('delete_ticket')
-                        .setLabel('🗑️ حذف تیکت')
-                        .setStyle(ButtonStyle.Danger)
-                );
-
-                await originalMessage.edit({
-                    components: [closedTicketButtons]
-                });
-            }
-
             // Quick reply to user
             await interaction.editReply({
                 embeds: [
@@ -235,6 +216,34 @@ async function handleButton(interaction, client, env) {
                         .setTimestamp()
                 ]
             });
+
+            // Update buttons after closing ticket
+            const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
+            if (originalMessage && originalMessage.components.length > 0) {
+                const reopenButton = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('reopen_ticket')
+                        .setLabel('🔓 باز کردن تیکت')
+                        .setStyle(ButtonStyle.Primary)
+                );
+
+                const adminButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('create_transcript')
+                        .setLabel('📋 ساخت ترنسکریپت')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId('ticket_delete')
+                        .setLabel('🗑️ حذف تیکت')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await originalMessage.edit({
+                    content: originalMessage.content,
+                    embeds: originalMessage.embeds,
+                    components: [reopenButton, adminButtons]
+                });
+            }
 
             // Background logging (non-blocking)
             setImmediate(async () => {
@@ -1159,6 +1168,142 @@ async function handleModal(interaction, client, env) {
         }
     }
 }
+    else if (customId === 'reopen_ticket') {
+        console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const ticketInfo = db.ticketInfo.get(channel.id);
+        if (!ticketInfo) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ اطلاعات تیکت پیدا نشد.');
+            return interaction.editReply({ embeds: [errorEmbed] });
+        }
+
+        try {
+            // Move ticket back to original category
+            if (ticketInfo.originalCategory) {
+                await channel.setParent(ticketInfo.originalCategory);
+            }
+
+            // Restore permissions for ticket owner
+            await channel.permissionOverwrites.edit(ticketInfo.ownerId, {
+                SendMessages: true,
+                ViewChannel: true,
+                ReadMessageHistory: true
+            });
+
+            // Update ticket info
+            db.ticketInfo.set(channel.id, { 
+                ...ticketInfo, 
+                status: 'open', 
+                reopenedBy: user.id, 
+                reopenedAt: Date.now()
+            });
+
+            // Restore original buttons
+            const userButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('complete_purchase').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('close_ticket_user').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
+            );
+
+            const adminButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('record_order_admin').setLabel('📝 Record Order').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
+            );
+
+            const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
+            if (originalMessage) {
+                await originalMessage.edit({
+                    content: originalMessage.content,
+                    embeds: originalMessage.embeds,
+                    components: [userButtons, adminButtons]
+                });
+            }
+
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setDescription('✅ تیکت با موفقیت مجدداً باز شد.');
+
+            await interaction.editReply({ embeds: [successEmbed] });
+            await logAction(guild, `🔓 Ticket ${channel.name} reopened by ${user.tag}.`);
+            
+            if (logger) {
+                await logger.logTicket('Reopened', user, {
+                    TicketChannel: `${channel.name} (${channel.id})`,
+                    ReopenedBy: `${user.tag} (${user.id})`,
+                    Owner: `<@${ticketInfo.ownerId}>`
+                });
+            }
+
+        } catch (error) {
+            console.error('Error reopening ticket:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
+    else if (customId === 'create_transcript') {
+        console.log(`📋 Create transcript button clicked by ${user.tag}`);
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            // Fetch all messages in the ticket
+            const messages = await channel.messages.fetch({ limit: 100 });
+            
+            // Create transcript content
+            let transcript = `📋 ترنسکریپت تیکت: ${channel.name}\n`;
+            transcript += `👤 صاحب تیکت: <@${db.ticketInfo.get(channel.id)?.ownerId}>\n`;
+            transcript += `⏰ زمان ساخت: <t:${Math.floor((db.ticketInfo.get(channel.id)?.createdAt || Date.now()) / 1000)}:F>\n`;
+            transcript += `📝 دلیل: ${db.ticketInfo.get(channel.id)?.reason || 'نامشخص'}\n`;
+            transcript += `${'='.repeat(50)}\n\n`;
+
+            messages.forEach(msg => {
+                transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content}\n`;
+                if (msg.attachments.size > 0) {
+                    transcript += `[فایل(ها): ${msg.attachments.map(a => a.url).join(', ')}]\n`;
+                }
+                transcript += '\n';
+            });
+
+            // Send transcript as a file or in chunks
+            if (transcript.length > 2000) {
+                // Send as chunks
+                const chunks = transcript.match(/.{1,2000}/g) || [];
+                for (let i = 0; i < chunks.length; i++) {
+                    await interaction.followUp({
+                        content: `\`\`\`\n📋 ترنسکریپت (بخش ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\`\`\``,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+            } else {
+                await interaction.editReply({
+                    content: `\`\`\`\n📋 ترنسکریپت تیکت:\n\n${transcript}\n\`\`\``
+                });
+            }
+
+            await logAction(guild, `📋 Transcript created for ticket ${channel.name} by ${user.tag}.`);
+
+        } catch (error) {
+            console.error('Error creating transcript:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در ساخت ترنسکریپت. لطفاً دوباره تلاش کنید.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
 
 
 module.exports = {
