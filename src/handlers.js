@@ -1303,6 +1303,7 @@ async function handleModal(interaction, client, env) {
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
+}
 
 
 module.exports = {
