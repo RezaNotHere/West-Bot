@@ -14,18 +14,35 @@ const setLogger = (l) => { logger = l; }
 const setSecurity = (s) => { security = s; }
 const setConfig = (c) => { configInstance = c; }
 
+// Safe interaction reply helper
+async function safeReply(interaction, options) {
+    try {
+        if (interaction.replied || interaction.deferred) {
+            return await interaction.followUp(options);
+        } else {
+            return await interaction.reply(options);
+        }
+    } catch (error) {
+        if (error.code === 10062) {
+            console.warn('⚠️ Interaction expired or already handled:', error.message);
+        } else {
+            console.error('❌ Interaction reply failed:', error);
+        }
+        return null;
+    }
+}
+
 // --- handleButton ---
 async function handleButton(interaction, client, env) {
-    try {
-        console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
-        
-        // Handle appeal support ban button
-        if (interaction.customId.startsWith('appeal_support_ban_')) {
+    console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
+    
+    // Handle appeal support ban button
+    if (interaction.customId.startsWith('appeal_support_ban_')) {
         const userId = interaction.customId.split('_')[3];
         
         // Check if this user is trying to appeal their own ban
         if (interaction.user.id !== userId) {
-            return await interaction.reply({ 
+            return await safeReply(interaction, { 
                 content: '❌ You can only appeal your own support ban.', 
                 flags: MessageFlags.Ephemeral 
             });
@@ -41,7 +58,7 @@ async function handleButton(interaction, client, env) {
             
             if (timeSinceDenial < oneHour) {
                 const remainingTime = Math.ceil((oneHour - timeSinceDenial) / (60 * 1000));
-                return await interaction.reply({ 
+                return await safeReply(interaction, { 
                     content: `❌ You must wait ${remainingTime} more minutes before submitting another appeal.`, 
                     flags: MessageFlags.Ephemeral 
                 });
@@ -81,7 +98,7 @@ async function handleButton(interaction, client, env) {
     if (interaction.customId.startsWith('approve_appeal_') || interaction.customId.startsWith('deny_appeal_')) {
         // Check if user has permission to handle appeals
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-            return await interaction.reply({ 
+            return await safeReply(interaction, { 
                 content: '❌ You do not have permission to handle appeals.', 
                 flags: MessageFlags.Ephemeral 
             });
@@ -96,7 +113,7 @@ async function handleButton(interaction, client, env) {
             const appeal = appeals[userId];
             
             if (!appeal) {
-                return await interaction.reply({ 
+                return await safeReply(interaction, { 
                     content: '❌ Appeal not found.', 
                     flags: MessageFlags.Ephemeral 
                 });
@@ -240,7 +257,7 @@ async function handleButton(interaction, client, env) {
 
         } catch (error) {
             console.error('Error handling appeal decision:', error);
-            await interaction.reply({ 
+            await safeReply(interaction, { 
                 content: '❌ Error processing appeal decision.', 
                 flags: MessageFlags.Ephemeral 
             });
@@ -270,16 +287,16 @@ async function handleButton(interaction, client, env) {
                         `${index + 1}. \`${entry.name}\`${entry.changedToAt ? ` - <t:${Math.floor(entry.changedToAt / 1000)}:R>` : ' (Original)'}`
                     ).join('\n'))
                     .setFooter({ text: `UUID: ${uuid}` });
-                await interaction.reply({ embeds: [historyEmbed], flags: MessageFlags.Ephemeral });
+                await safeReply(interaction, { embeds: [historyEmbed], flags: MessageFlags.Ephemeral });
             } else {
-                await interaction.reply({
+                await safeReply(interaction, {
                     content: '❌ Username history not found.',
                     flags: MessageFlags.Ephemeral
                 });
             }
         } catch (error) {
             console.error('Error handling name history button:', error);
-            await interaction.reply({
+            await safeReply(interaction, {
                 content: '❌ Error fetching username history',
                 flags: MessageFlags.Ephemeral
             });
@@ -321,7 +338,7 @@ async function handleButton(interaction, client, env) {
         } catch (err) {
             console.error('Error updating giveaway embed:', err);
         }
-        await interaction.reply({ content: 'You have successfully joined the giveaway! Good luck! 🎉', flags: MessageFlags.Ephemeral });
+        await safeReply(interaction, { content: 'You have successfully joined the giveaway! Good luck! 🎉', flags: MessageFlags.Ephemeral });
         return;
     }
     console.log(`Checking role button for customId='${interaction.customId}' (startsWith 'rolebtn_': ${interaction.customId ? interaction.customId.startsWith('rolebtn_') : false})`);
@@ -358,13 +375,13 @@ async function handleButton(interaction, client, env) {
                 emoji = '➕';
             }
             const embed = new EmbedBuilder().setColor(color).setDescription(`${emoji} ${action}: <@&${roleId}>`);
-            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
         } catch (err) {
             console.error('Error handling role button:', err);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setDescription('❌ خطا در مدیریت رول. ممکن است رول بالاتر از رول ربات باشد یا دسترسی لازم وجود نداشته باشد.');
-            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            await safeReply(interaction, { embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         return;
     }
@@ -513,7 +530,7 @@ async function handleButton(interaction, client, env) {
             // Comprehensive error handling for interaction states
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({
+                    await safeReply(interaction, {
                         content: '❌ خطایی در بستن تیکت رخ داد.',
                         flags: MessageFlags.Ephemeral
                     });
@@ -731,7 +748,7 @@ async function handleButton(interaction, client, env) {
             .setTitle('✅ سفارش تکمیل شد')
             .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} با موفقیت تکمیل و تحویل داده شد.\n\nکاربر اطلاع‌رسانی شده و می‌تواند نظر خود را ثبت کند.`);
 
-        await interaction.reply({ embeds: [completionEmbed] });
+        await safeReply(interaction, { embeds: [completionEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} تکمیل شد.`);
         
         if (logger) {
@@ -784,7 +801,7 @@ async function handleButton(interaction, client, env) {
             .setTitle('📝 سفارش ثبت شد')
             .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} ثبت شد و در صف پردازش قرار گرفت.\n\nکاربر اطلاع‌رسانی شده و منتظر تکمیل سفارش است.`);
 
-        await interaction.reply({ embeds: [recordEmbed] });
+        await safeReply(interaction, { embeds: [recordEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} ثبت شد.`);
         
         if (logger) {
@@ -825,7 +842,7 @@ async function handleButton(interaction, client, env) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setDescription('❌ شما اجازه مدیریت تیکت‌ها را ندارید.');
-            return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            return await safeReply(interaction, { embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
 
         // Check if interaction is already replied/deferred
@@ -958,7 +975,7 @@ async function handleButton(interaction, client, env) {
     else if (customId === 'ticket_delete') {
         // Handle ticket deletion
         if (!interaction.member.permissions.has('ManageChannels')) {
-            return await interaction.reply({
+            return await safeReply(interaction, {
                 content: '❌ You do not have permission to manage tickets.',
                 flags: MessageFlags.Ephemeral
             });
@@ -973,7 +990,7 @@ async function handleButton(interaction, client, env) {
         const processingEmbed = new EmbedBuilder()
             .setColor('Yellow')
             .setDescription('⏳ در حال حذف تیکت...');
-        await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
+        await safeReply(interaction, { embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
 
         // Process deletion in background
         setImmediate(async () => {
@@ -1279,10 +1296,9 @@ async function handleButton(interaction, client, env) {
 
 // --- handleSelectMenu ---
 async function handleSelectMenu(interaction, client, env) {
-    try {
-        const { customId, values, user, guild } = interaction;
-        const REVIEW_CHANNEL_ID = config.channels.review;
-        const BUYER_ROLE_ID = config.roles.buyer;
+    const { customId, values, user, guild } = interaction;
+    const REVIEW_CHANNEL_ID = config.channels.review;
+    const BUYER_ROLE_ID = config.roles.buyer;
 
     if (customId === 'ticket_select') {
         const reason = values[0];
@@ -1646,7 +1662,7 @@ async function handleModal(interaction, client, env) {
             }
 
             const successEmbed = new EmbedBuilder().setColor('Green').setDescription('Thank you! Your review and rating have been submitted successfully.');
-            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            await safeReply(interaction, { embeds: [successEmbed], flags: MessageFlags.Ephemeral });
 
             if (BUYER_ROLE_ID) {
                 const member = await guild.members.fetch(user.id);
@@ -1656,7 +1672,7 @@ async function handleModal(interaction, client, env) {
             // Only reply if not already replied
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
+                    await safeReply(interaction, { content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1729,7 +1745,7 @@ async function handleModal(interaction, client, env) {
                 }
             } else if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await safeReply(interaction, { content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1766,7 +1782,7 @@ async function handleModal(interaction, client, env) {
                 .setColor('Green')
                 .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
-            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            await safeReply(interaction, { embeds: [successEmbed], flags: MessageFlags.Ephemeral });
             
             if (logger) {
                 await logger.logTicket('Created (other)', user, {
@@ -1779,7 +1795,7 @@ async function handleModal(interaction, client, env) {
             // Only reply if not already replied
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await safeReply(interaction, { content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1939,7 +1955,7 @@ async function handleModal(interaction, client, env) {
 
         } catch (err) {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
+                await safeReply(interaction, { content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
             } else {
                 await interaction.editReply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
             }
@@ -2271,132 +2287,6 @@ async function handleAdvertisementButtons(interaction, client, env) {
             });
         }
         return;
-    } catch (buttonError) {
-        // Handle Discord API errors gracefully
-        if (buttonError.code === 10062) { // Unknown interaction
-            console.warn('⚠️ Button interaction expired:', buttonError.message);
-        } else if (buttonError.code === 10008) { // Unknown member
-            console.warn('⚠️ Member not found in button handler:', buttonError.message);
-        } else if (buttonError.code === 10013) { // Unknown user
-            console.warn('⚠️ User not found in button handler:', buttonError.message);
-        } else {
-            // Log other errors normally
-            console.error('❌ Button handling error:', buttonError);
-            if (logger) {
-                logger.logError(buttonError, 'Button Handler', {
-                    User: `${interaction.user?.tag} (${interaction.user?.id})`,
-                    CustomId: interaction.customId || 'N/A',
-                    Channel: interaction.channel?.name || 'DM'
-                });
-            }
-        }
-    }
-}
-
-// --- handleSelectMenu ---
-async function handleSelectMenu(interaction, client, env) {
-    try {
-        const { customId, values, user, guild } = interaction;
-        const REVIEW_CHANNEL_ID = config.channels.review;
-        const BUYER_ROLE_ID = config.roles.buyer;
-
-    if (customId === 'ticket_select') {
-        const reason = values[0];
-        const ticketConfig = config.ticketSystem;
-        const categoryConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
-
-        // Check if category requires additional details
-        if (categoryConfig && categoryConfig.requiresDetails) {
-            const modal = new ModalBuilder()
-                .setCustomId(`ticket_details_modal_${reason}`)
-                .setTitle('Additional Details Required');
-            const detailsInput = new TextInputBuilder()
-                .setCustomId('ticket_details_input')
-                .setLabel('Please provide additional details')
-                .setPlaceholder('Enter any additional information...')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(false);
-
-            modal.addComponents(new ActionRowBuilder().addComponents(detailsInput));
-            return interaction.showModal(modal);
-        }
-
-        // Check if interaction is already replied/deferred
-        if (interaction.replied || interaction.deferred) {
-            return;
-        }
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        try {
-            await createTicketChannel(guild, user, reason);
-            const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
-            const successEmbed = new EmbedBuilder()
-                .setColor('Green')
-                .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
-
-            await interaction.editReply({ embeds: [successEmbed] });
-            
-            if (logger) {
-                await logger.logTicket('Created', user, {
-                    TicketChannel: ticketChannelId ? `<#${ticketChannelId}>` : 'N/A',
-                    Reason: reason,
-                    Category: reason
-                });
-            }
-        } catch (err) {
-            // Only edit reply if deferred
-            if (interaction.deferred && !interaction.replied) {
-                try {
-                    await interaction.editReply({ content: '❌ Error creating ticket.' });
-                } catch (editErr) {
-                    console.error('Failed to edit reply after ticket creation error:', editErr);
-                }
-            }
-            console.error('Error creating ticket:', err);
-            if (logger) {
-                await logger.logError(err, 'Ticket Creation', {
-                    User: `${user.tag} (${user.id})`,
-                    Reason: reason,
-                    Guild: guild.name
-                });
-            }
-        }
-        return;
-    }
-
-    if (customId === 'rating_input') {
-        const rating = values[0];
-        const modal = new ModalBuilder().setCustomId(`review_comment_modal_${rating}`).setTitle('نظر خود را بنویسید');
-        const commentInput = new TextInputBuilder().setCustomId('comment_input').setLabel('Write your comment (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false);
-        modal.addComponents(new ActionRowBuilder().addComponents(commentInput));
-        return interaction.showModal(modal);
-    }
-
-    // Handle other select menus
-    console.log(`Unknown select menu: customId='${customId}', user='${user.id}', guild='${guild.id}'`);
-    const errorEmbed = new EmbedBuilder()
-        .setColor('Red')
-        .setDescription(`❌ منوی نامشخص: ${customId}`);
-    await interaction.editReply({ embeds: [errorEmbed] });
-    } catch (selectMenuError) {
-        // Handle Discord API errors gracefully
-        if (selectMenuError.code === 10062) { // Unknown interaction
-            console.warn('⚠️ Select menu interaction expired:', selectMenuError.message);
-        } else if (selectMenuError.code === 10008) { // Unknown member
-            console.warn('⚠️ Member not found in select menu handler:', selectMenuError.message);
-        } else if (selectMenuError.code === 10013) { // Unknown user
-            console.warn('⚠️ User not found in select menu handler:', selectMenuError.message);
-        } else {
-            // Log other errors normally
-            console.error('❌ Select menu handling error:', selectMenuError);
-            if (logger) {
-                logger.logError(selectMenuError, 'Select Menu Handler', {
-                    User: `${interaction.user?.tag} (${interaction.user?.id})`,
-                    CustomId: interaction.customId || 'N/A',
-                    Channel: interaction.channel?.name || 'DM'
-                });
-            }
-        }
     }
 }
 
