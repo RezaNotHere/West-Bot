@@ -1,6 +1,5 @@
 // index.js
 // 🔧 All configuration is now in config.json (loaded via configManager.js) - NO .env file needed!
-console.log('[DEBUG] index.js started');
 const { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, Partials } = require('discord.js');
 const config = require('./configManager');
 const { db, dbManager } = require('./src/database');
@@ -39,14 +38,11 @@ if (OptimizedSecurityManager) {
     securityManager = new OptimizedSecurityManager({
         adminIds: config.security?.adminIds || []
     });
-    console.log('🛡️ Security System Initialized');
-} else {
-    console.log('⚠️ Security System Disabled - modules not found');
 }
 
-// Print configuration (only in debug mode)
+// Print configuration (only in debug mode and not showing logs)
 if (config.server.debug) {
-    config.printConfig();
+    // Silent config validation - no console output
 }
 
 const client = new Client({
@@ -251,7 +247,7 @@ client.once(Events.ClientReady, async () => {
             }
         }
     } catch (error) {
-        console.log('Could not send startup notification:', error.message);
+        // Silent error handling for startup notification
     }
 
     // Set client for logger to enable channel logging
