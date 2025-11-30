@@ -389,15 +389,90 @@ client.on(Events.MessageCreate, async (message) => {
             // Delete message with bad words
             await message.delete().catch(() => {});
             
-            // Send warning to user
+            // Add warning to user
+            const warningCount = await utils.addWarning(message.author.id, 'Using inappropriate language (bad words)', message.guild.members.me || { tag: 'System', id: '0' });
+            
+            // Check if user should be banned (3 warnings = ban)
+            if (warningCount >= 3) {
+                try {
+                    // Ban the user
+                    await message.guild.members.ban(message.author, { 
+                        reason: '3 warnings for inappropriate language (auto-ban)',
+                        deleteMessageDays: 1 
+                    });
+                    
+                    // Send ban notification to support channel
+                    const banEmbed = new EmbedBuilder()
+                        .setColor('Red')
+                        .setTitle('🔨 USER AUTO-BANNED')
+                        .setDescription(`User has been automatically banned after 3 warnings.`)
+                        .addFields(
+                            { name: '👤 Banned User', value: `${message.author.tag} (${message.author.id})`, inline: false },
+                            { name: '⚠️ Warning Count', value: `${warningCount}/3`, inline: true },
+                            { name: '📝 Reason', value: 'Inappropriate language (bad words)', inline: true },
+                            { name: '🔧 Action', value: 'Auto-ban (3 warnings reached)', inline: true },
+                            { name: '📅 Date', value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true }
+                        )
+                        .setTimestamp()
+                        .setFooter({ text: 'West Bot Auto-Moderation System' });
+                    
+                    // Send to support/log channel
+                    const supportChannelId = config.channels.log || config.channels.support;
+                    if (supportChannelId) {
+                        const supportChannel = message.guild.channels.cache.get(supportChannelId);
+                        if (supportChannel) {
+                            await supportChannel.send({ embeds: [banEmbed] });
+                            
+                            // Also try to send DM to banned user
+                            try {
+                                const dmEmbed = new EmbedBuilder()
+                                    .setColor('Red')
+                                    .setTitle('🔨 You have been banned')
+                                    .setDescription('You have been automatically banned from the server.')
+                                    .addFields(
+                                        { name: '⚠️ Reason', value: 'You received 3 warnings for inappropriate language', inline: false },
+                                        { name: '📊 Warning Count', value: `${warningCount}/3`, inline: true },
+                                        { name: '📝 Note', value: 'This is an automatic action. If you believe this is a mistake, please contact server administration.', inline: false }
+                                    )
+                                    .setTimestamp()
+                                    .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() });
+                                
+                                await message.author.send({ embeds: [dmEmbed] });
+                            } catch (dmError) {
+                                // Can't send DM, ignore
+                            }
+                        }
+                    }
+                    
+                    // Log the ban
+                    await logger.logModeration('User Auto-Banned (3 Warnings)', 
+                        message.guild.members.me || { tag: 'System', id: '0' },
+                        message.author,
+                        {
+                            WarningCount: warningCount,
+                            Reason: 'Inappropriate language (bad words)',
+                            Action: 'Auto-ban after 3 warnings',
+                            Channel: `${message.channel.name} (${message.channel.id})`
+                        }
+                    );
+                    
+                } catch (banError) {
+                    console.error('Failed to ban user:', banError);
+                }
+                
+                return; // Stop processing
+            }
+            
+            // Send warning to user (if not banned)
             const warningEmbed = new EmbedBuilder()
-                .setColor('Red')
+                .setColor(warningCount >= 2 ? 'Orange' : 'Yellow')
                 .setTitle('⚠️ Warning: Inappropriate Language')
                 .setDescription('Your message was deleted for containing inappropriate language.')
                 .addFields(
                     { name: '📝 Rule Violation', value: 'Use of prohibited words is not allowed.', inline: false },
                     { name: '⚡ Action Taken', value: 'Message deleted automatically', inline: false },
-                    { name: '🔔 Reminder', value: 'Repeated violations may result in a ban.', inline: false }
+                    { name: '⚠️ Warning Count', value: `${warningCount}/3 (3 warnings = ban)`, inline: true },
+                    { name: '🔔 Reminder', value: 'Repeated violations will result in a ban.', inline: false }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'West Bot Moderation System' });
@@ -415,7 +490,8 @@ client.on(Events.MessageCreate, async (message) => {
                 {
                     Channel: `${message.channel.name} (${message.channel.id})`,
                     Message: message.content.substring(0, 100),
-                    Action: 'Message deleted + Warning sent'
+                    WarningCount: `${warningCount}/3`,
+                    Action: 'Message deleted + Warning added'
                 }
             );
             
