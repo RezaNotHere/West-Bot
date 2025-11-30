@@ -1,5 +1,14 @@
 const Enmap = require('enmap').default;
 const { encrypt, decrypt } = require('./encryption');
+const fs = require('fs');
+const path = require('path');
+
+// Ensure data directory exists
+const dataDir = path.join(__dirname, '..', 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log(`✅ Created data directory: ${dataDir}`);
+}
 
 // A wrapper for Enmap that automatically encrypts and decrypts data.
 class SecureEnmap extends Enmap {
