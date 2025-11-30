@@ -158,37 +158,29 @@ async function handleButton(interaction, client, env) {
                     .setDescription('❌ This channel is not a ticket or ticket information was not found.');
                 return interaction.editReply({ embeds: [errorEmbed] });
             }
-            // Log ticket close
-            if (logger) {
-                await logger.logTicket('Closed', user, {
-                    TicketChannel: `${channel.name} (${channel.id})`,
-                    TicketOwner: `<@${ticketInfo.ownerId}>`,
-                    Reason: ticketInfo.reason || 'N/A',
-                    ClosedBy: `${user.tag} (${user.id})`
-                });
-            }
-            // Get or create "Closed Tickets" category
+
+            // Get or create "Closed Tickets" category (cached)
             let closedCategory = guild.channels.cache.find(c => c.name === 'Closed Tickets' && c.type === 4);
             if (!closedCategory) {
                 closedCategory = await guild.channels.create({
                     name: 'Closed Tickets',
-                    type: 4, // GUILD_CATEGORY
-                    position: 999 // Put at bottom
+                    type: 4,
+                    position: 999
                 });
             }
 
-            // Store original category for potential reopening
+            // Store original category
             const originalParent = channel.parent;
 
-            // Move ticket to closed category
-            await channel.setParent(closedCategory.id);
-
-            // Update permissions - remove send message permission from ticket owner
-            await channel.permissionOverwrites.edit(ticketInfo.ownerId, {
-                SendMessages: false,
-                ViewChannel: true,
-                ReadMessageHistory: true
-            });
+            // Batch operations for better performance
+            await Promise.all([
+                channel.setParent(closedCategory.id),
+                channel.permissionOverwrites.edit(ticketInfo.ownerId, {
+                    SendMessages: false,
+                    ViewChannel: true,
+                    ReadMessageHistory: true
+                })
+            ]);
 
             // Send confirmation message
             const closeEmbed = new EmbedBuilder()
@@ -202,27 +194,19 @@ async function handleButton(interaction, client, env) {
                 .setFooter({ text: 'با تشکر از تماس شما' })
                 .setTimestamp();
 
-            await channel.send({ embeds: [closeEmbed] });
+            // Update database and send message in parallel
+            await Promise.all([
+                channel.send({ embeds: [closeEmbed] }),
+                db.ticketInfo.set(channel.id, { 
+                    ...ticketInfo, 
+                    status: 'closed', 
+                    closedBy: user.id, 
+                    closedAt: Date.now(),
+                    originalCategory: originalParent?.id
+                })
+            ]);
 
-            // Log ticket close
-            if (logger) {
-                await logger.logTicket('Closed', user, {
-                    TicketChannel: `${channel.name} (${channel.id})`,
-                    TicketOwner: `<@${ticketInfo.ownerId}>`,
-                    Reason: ticketInfo.reason || 'N/A',
-                    ClosedBy: `${user.tag} (${user.id})`
-                });
-            }
-
-            // Update ticket info
-            db.ticketInfo.set(channel.id, { 
-                ...ticketInfo, 
-                status: 'closed', 
-                closedBy: user.id, 
-                closedAt: Date.now(),
-                originalCategory: originalParent?.id
-            });
-
+            // Quick reply to user
             await interaction.editReply({
                 embeds: [
                     new EmbedBuilder()
@@ -233,7 +217,23 @@ async function handleButton(interaction, client, env) {
                 ]
             });
 
-            await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
+            // Background logging (non-blocking)
+            setImmediate(async () => {
+                try {
+                    await logAction(guild, `🔒 Ticket ${channel.name} closed by ${user.tag}.`);
+                    
+                    if (logger) {
+                        await logger.logTicket('Closed', user, {
+                            TicketChannel: `${channel.name} (${channel.id})`,
+                            TicketOwner: `<@${ticketInfo.ownerId}>`,
+                            Reason: ticketInfo.reason || 'N/A',
+                            ClosedBy: `${user.tag} (${user.id})`
+                        });
+                    }
+                } catch (logError) {
+                    console.error('Logging error (non-critical):', logError);
+                }
+            });
             
         } catch (error) {
             console.error('Error closing ticket:', error);
@@ -293,9 +293,7 @@ async function handleButton(interaction, client, env) {
             return interaction.editReply({ embeds: [errorEmbed] });
         }
 
-        // Update ticket info with claimer
-        db.ticketInfo.set(channel.id, { ...ticketInfo, claimedBy: user.id, status: 'claimed' });
-
+        // Quick database update and message send in parallel
         const claimEmbed = new EmbedBuilder()
             .setColor('#9B59B6')
             .setTitle('👤 تیکت تصدی شد')
@@ -307,22 +305,36 @@ async function handleButton(interaction, client, env) {
             .setFooter({ text: 'سیستم تیکت' })
             .setTimestamp();
 
-        await channel.send({ embeds: [claimEmbed] });
+        await Promise.all([
+            db.ticketInfo.set(channel.id, { ...ticketInfo, claimedBy: user.id, status: 'claimed' }),
+            channel.send({ embeds: [claimEmbed] })
+        ]);
 
-        const successEmbed = new EmbedBuilder()
-            .setColor('#2ECC71')
-            .setDescription('✅ تیکت با موفقیت تصدی شد.');
+        await interaction.editReply({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor('#2ECC71')
+                    .setDescription('✅ تیکت با موفقیت تصدی شد.')
+                    .setTimestamp()
+            ]
+        });
 
-        await interaction.editReply({ embeds: [successEmbed] });
-        await logAction(guild, `👤 تیکت ${channel.name} توسط ${user.tag} تصدی شد.`);
-        
-        if (logger) {
-            await logger.logTicket('Claimed', user, {
-                TicketChannel: `${channel.name} (${channel.id})`,
-                ClaimedBy: `${user.tag} (${user.id})`,
-                Owner: `<@${ticketInfo.ownerId}>`
-            });
-        }
+        // Background logging (non-blocking)
+        setImmediate(async () => {
+            try {
+                await logAction(guild, `👤 تیکت ${channel.name} توسط ${user.tag} تصدی شد.`);
+                
+                if (logger) {
+                    await logger.logTicket('Claimed', user, {
+                        TicketChannel: `${channel.name} (${channel.id})`,
+                        ClaimedBy: `${user.tag} (${user.id})`,
+                        Owner: `<@${ticketInfo.ownerId}>`
+                    });
+                }
+            } catch (logError) {
+                console.error('Logging error (non-critical):', logError);
+            }
+        });
     }
     else if (customId === 'complete_purchase') {
         console.log(`✅ Complete purchase button clicked by ${user.tag}`);
@@ -348,14 +360,22 @@ async function handleButton(interaction, client, env) {
         const row = new ActionRowBuilder().addComponents(ratingMenu);
 
         await interaction.editReply({ content: '✅ خرید تکمیل شد', components: [row] });
-        await logAction(guild, `✅ خرید کاربر ${user.tag} در تیکت ${channel.name} تکمیل شد.`);
-        
-        if (logger) {
-            await logger.logShop('Purchase Completed', user, {
-                Ticket: `${channel.name} (${channel.id})`,
-                User: `${user.tag} (${user.id})`
-            });
-        }
+
+        // Background logging (non-blocking)
+        setImmediate(async () => {
+            try {
+                await logAction(guild, `✅ خرید کاربر ${user.tag} در تیکت ${channel.name} تکمیل شد.`);
+                
+                if (logger) {
+                    await logger.logShop('Purchase Completed', user, {
+                        Ticket: `${channel.name} (${channel.id})`,
+                        User: `${user.tag} (${user.id})`
+                    });
+                }
+            } catch (logError) {
+                console.error('Logging error (non-critical):', logError);
+            }
+        });
     }
     else if (customId === 'complete_purchase_admin') {
         console.log(`✅ Complete purchase (admin) button clicked by ${user.tag}`);
