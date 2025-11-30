@@ -51,6 +51,8 @@ if (OptimizedSecurityManager) {
         });
         console.log('✅ OptimizedSecurityManager initialized successfully');
         console.log('🔍 Debug: securityManager methods:', Object.getOwnPropertyNames(securityManager.__proto__));
+        console.log('🔍 Debug: checkInteractionSecurity exists:', typeof securityManager.checkInteractionSecurity);
+        console.log('🔍 Debug: securityManager object:', securityManager);
     } catch (error) {
         console.error('❌ Failed to initialize OptimizedSecurityManager:', error);
         securityManager = null;
