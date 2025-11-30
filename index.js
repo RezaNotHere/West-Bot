@@ -261,7 +261,7 @@ client.once(Events.ClientReady, async () => {
     // 🚀 Auto-update slash commands on startup
     console.log('\x1b[96m🔄 Updating slash commands...');
     try {
-        await utils.registerCommands(config.client.id, config.server.guildId, config.client.token);
+        await utils.registerCommands(config.bot.clientId, config.bot.guildId, config.bot.token);
         console.log('\x1b[92m✅ Slash commands updated successfully!\x1b[0m');
     } catch (error) {
         console.log('\x1b[91m❌ Error updating slash commands:', error.message, '\x1b[0m');
@@ -271,7 +271,7 @@ client.once(Events.ClientReady, async () => {
     setInterval(async () => {
         console.log('\x1b[96m🔄 [AUTO] Updating slash commands (24h check)...');
         try {
-            await utils.registerCommands(config.client.id, config.server.guildId, config.client.token);
+            await utils.registerCommands(config.bot.clientId, config.bot.guildId, config.bot.token);
             console.log('\x1b[92m✅ [AUTO] Slash commands updated successfully!\x1b[0m');
         } catch (error) {
             console.log('\x1b[91m❌ [AUTO] Error updating slash commands:', error.message, '\x1b[0m');
