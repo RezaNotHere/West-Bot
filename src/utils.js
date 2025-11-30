@@ -637,12 +637,19 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
         type: 0, // GUILD_TEXT
         parent: category.id,
         permissionOverwrites: [
-            { id: guild.id, deny: ['ViewChannel'] },
-            { id: user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles', 'EmbedLinks'] },
-            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageMessages'] },
-            { id: TICKET_CATEGORY_ID, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
+            { id: guild.id, deny: ['ViewChannel'] }, 
+            { id: user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles', 'EmbedLinks'] }, 
+            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageMessages'] } 
         ]
     });
+
+    if (TICKET_CATEGORY_ID && TICKET_CATEGORY_ID !== guild.id) {
+        await ticketChannel.permissionOverwrites.edit(TICKET_CATEGORY_ID, {
+            ViewChannel: true,
+            ReadMessageHistory: true,
+            SendMessages: false 
+        });
+    }
 
     const finalReason = ticketConfig.menu.categories.find(cat => cat.value === reason)?.label || reason;
     
