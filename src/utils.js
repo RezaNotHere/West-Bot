@@ -48,10 +48,10 @@ const rateLimits = new Map(); // New: Rate limiting for API calls
 function loadBadWords() {
     try {
         // Load all banned words from database
-        const bannedWords = db.bannedWords.fetchEverything();
         badWords.clear();
         
-        for (const [word, value] of bannedWords) {
+        // Use enmap's direct iteration instead of fetchEverything
+        for (const [word, value] of db.bannedWords) {
             if (value) {
                 badWords.add(word);
             }
