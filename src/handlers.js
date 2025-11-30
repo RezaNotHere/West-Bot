@@ -1167,7 +1167,6 @@ async function handleModal(interaction, client, env) {
             });
         }
     }
-}
     else if (customId === 'reopen_ticket') {
         console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
