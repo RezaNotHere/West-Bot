@@ -34,7 +34,20 @@ class InteractionUtils {
 
         const options = { embeds: [errorEmbed], flags: MessageFlags.Ephemeral };
 
-        return await safeReply(interaction, options);
+        try {
+            if (interaction.deferred) {
+                return await interaction.editReply(options);
+            } else {
+                return await safeReply(interaction, options);
+            }
+        } catch (error) {
+            if (error.code === 10062) {
+                console.warn('⚠️ Interaction expired or already handled:', error.message);
+            } else {
+                console.error('❌ sendError failed:', error);
+            }
+            return null;
+        }
     }
 
     /**
@@ -51,7 +64,20 @@ class InteractionUtils {
         
         const options = { embeds: [successEmbed], flags: ephemeral ? MessageFlags.Ephemeral : undefined };
         
-        return await safeReply(interaction, options);
+        try {
+            if (interaction.deferred) {
+                return await interaction.editReply(options);
+            } else {
+                return await safeReply(interaction, options);
+            }
+        } catch (error) {
+            if (error.code === 10062) {
+                console.warn('⚠️ Interaction expired or already handled:', error.message);
+            } else {
+                console.error('❌ sendSuccess failed:', error);
+            }
+            return null;
+        }
     }
 
     /**
