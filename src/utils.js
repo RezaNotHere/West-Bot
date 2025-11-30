@@ -685,6 +685,15 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
         components: [userButtons, adminButtons]
     });
 
+    // Store ticket information in database
+    db.ticketInfo.set(ticketChannel.id, {
+        ownerId: user.id,
+        reason: finalReason,
+        createdAt: Date.now(),
+        originalCategory: category.id,
+        additionalDetails: additionalDetails || ''
+    });
+
     await logAction(guild, `🎟️ New ticket created for ${user.tag} with subject "${finalReason}". <#${ticketChannel.id}>`);
     
     return ticketChannel;

@@ -16,7 +16,8 @@ const setConfig = (c) => { configInstance = c; }
 
 // --- handleButton ---
 async function handleButton(interaction, client, env) {
-    console.log(`handleButton called for customId='${interaction.customId}'`);
+    console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
+    
     // Handle name history button
     if (interaction.customId.startsWith('namehistory_')) {
         // Only admin or special role can access
@@ -139,8 +140,10 @@ async function handleButton(interaction, client, env) {
 
     // Handle different button interactions
     if (customId === 'close_ticket_user') {
+        console.log(`🔒 Close ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
 
@@ -280,9 +283,11 @@ async function handleButton(interaction, client, env) {
         }
     }
     else if (customId === 'claim_ticket') {
+        console.log(`👋 Claim ticket button clicked by ${user.tag}`);
         // Handle ticket claiming logic
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -327,9 +332,11 @@ async function handleButton(interaction, client, env) {
         }
     }
     else if (customId === 'complete_purchase') {
+        console.log(`✅ Complete purchase button clicked by ${user.tag}`);
         // Handle purchase completion - show rating menu
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -358,6 +365,7 @@ async function handleButton(interaction, client, env) {
         }
     }
     else if (customId === 'complete_purchase_admin') {
+        console.log(`✅ Complete purchase (admin) button clicked by ${user.tag}`);
         // Only admins
         if (!interaction.member.permissions.has('Administrator')) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('شما دسترسی لازم برای این عملیات را ندارید.');
@@ -417,6 +425,7 @@ async function handleButton(interaction, client, env) {
         }
     }
     else if (customId === 'record_order_admin') {
+        console.log(`📝 Record order (admin) button clicked by ${user.tag}`);
         // Only admins can record orders
         if (!interaction.member.permissions.has('Administrator')) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription('شما دسترسی لازم برای این عملیات را ندارید.');
@@ -983,10 +992,6 @@ async function handleModal(interaction, client, env) {
                     User: `${user.tag} (${user.id})`
                 });
             } else {
-                console.error('Error handling other reason modal:', err);
-            }
-        }
-    }
 
     if (customId.startsWith('sendmessage_modal_')) {
         // Check if interaction is already replied/deferred
