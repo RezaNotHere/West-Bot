@@ -1,4 +1,4 @@
-# 🤖 Advanced Discord Bot - West Bot v2.2.0
+# 🤖 Advanced Discord Bot - West Bot v3.0.0
 
 <div align="center">
 
@@ -6,9 +6,9 @@
 ![Node.js](https://img.shields.io/badge/Node.js-v16+-green?logo=node.js&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
-![Version](https://img.shields.io/badge/Version-2.2.0-blue)
+![Version](https://img.shields.io/badge/Version-3.0.0-blue)
 
-**A professional, feature-rich Discord bot for advanced server management, ticketing, giveaways, and Minecraft utilities.**
+**A professional, feature-rich Discord bot with advanced auto-moderation, 3-strike warning system, and comprehensive server management.**
 
 [English](#english) • [فارسی](#فارسی)
 
@@ -16,50 +16,40 @@
 
 ---
 
-## 🚀 What's New in v2.2.0 - SECURITY REVOLUTION
+## 🚀 What's New in v3.0.0 - AUTO-MODERATION REVOLUTION
 
-### 🛡️ Advanced Security System Overhaul
-- **Optimized Security Manager**: High-performance security with minimal impact (3-8ms vs 10-27ms)
-- **Advanced Input Validation**: Protection against XSS, SQL Injection, Command Injection
-- **Enhanced Rate Limiting**: Multi-layered rate limiting with smart punishments
-- **Intelligent Anti-Spam**: Advanced detection algorithms with zero logging overhead
-- **Emergency Mode**: Instant server lockdown during attacks
-- **Zero Log Spam**: All security logging optimized for performance
+### ⚠️ 3-Strike Warning System
+- **Smart Warning Tracking**: Persistent warnings with automatic escalation
+- **Auto-Ban System**: 3 warnings = automatic ban with permission checks
+- **Warning Count Display**: Users see their warning count (1/3, 2/3, 3/3)
+- **Support Notifications**: Auto-ban alerts sent to support channel
+- **DM Warnings**: Beautiful embed warnings sent to users
+- **Color-Coded Warnings**: Yellow (1st), Orange (2nd), Red (3rd)
 
-### ⚡ Performance Improvements
-- **70% Faster Security**: Optimized security checks with minimal overhead
-- **Smart Validation**: Only validate commands that need it
-- **Reduced Memory Usage**: 80% lighter memory footprint
-- **Selective Rate Limiting**: Applied only to expensive commands
+### 🚫 Enhanced Bad Words Detection
+- **Database Integration**: Bad words stored in persistent Enmap database
+- **Auto-Loading**: Words automatically loaded on bot startup
+- **Multiple Fallback Methods**: 3 different iteration methods for compatibility
+- **Real-time Updates**: Add/remove words instantly without restart
+- **Import Commands**: Bulk import from text with `/importbadwords`
 
-### 🔧 Technical Enhancements
-- **Modular Security**: Separate security modules for maximum flexibility
-- **Admin Tools**: Complete security management commands
-- **Real-time Statistics**: Performance monitoring and analytics
-- **Configurable Protection**: All security parameters customizable
+### 🛡️ Smart Permission Management
+- **Permission Checks**: Bot verifies permissions before taking actions
+- **Graceful Fallbacks**: No crashes when permissions missing
+- **Admin Notifications**: Support team notified of permission issues
+- **Safe Operations**: All moderation actions wrapped in safety checks
 
-### 🎯 Key Features Added
-- `/security status` - View security system status
-- `/security emergency` - Toggle emergency mode
-- `/security blacklist` - Manage blacklists
-- `/security report` - Generate security reports
-- Input sanitization for all user inputs
-- Automatic threat detection and response
+### 🧹 Simplified Startup
+- **Clean Console**: Minimal, fast startup without complex animations
+- **Error-Free**: Reduced startup errors with better error handling
+- **Quick Loading**: Faster bot initialization with essential setup only
+- **Professional Output**: Clean, readable startup messages
 
----
-
-## 🆕 Previous Updates (v2.1.0)
-
-### ✨ Enhanced Logging System
-- **Professional Discord Channel Logging**: All logs now sent to designated Discord channel with beautiful embeds
-- **Color-Coded Log Levels**: Each log type has distinct color (success=green, error=red, info=blue, warn=yellow)
-- **Smart Webhook Integration**: Only critical errors and security events sent to webhook
-- **Comprehensive Log Coverage**: Commands, tickets, errors, and all bot activities fully logged
-
-### 🎫 Improved Ticket System
-- **Smart Button Management**: Delete and transcript buttons only appear on closed tickets
-- **Clean Open Ticket Interface**: Open tickets show only relevant actions
-- **Enhanced User Experience**: Streamlined ticket workflow with proper button states
+### 🔧 Technical Improvements
+- **Enmap Database**: Persistent storage with automatic disk sync
+- **Better Error Handling**: Comprehensive try-catch blocks throughout
+- **Optimized Performance**: Reduced CPU usage and memory footprint
+- **Enhanced Logging**: Better error tracking and debugging information
 
 ---
 
@@ -67,15 +57,16 @@
 
 ### Overview
 
-**West Bot** is a comprehensive Discord bot engineered for professional and large-scale communities. It provides:
+**West Bot v3.0.0** is a comprehensive Discord bot engineered for professional communities with advanced auto-moderation capabilities:
 
-✨ **Advanced Moderation** - Complete suite of moderation tools with persistent warnings and automated actions  
+✨ **Advanced Auto-Moderation** - 3-strike warning system with auto-ban and smart permission handling  
+🚫 **Bad Words Filter** - Database-driven detection with real-time updates and bulk import  
 🎫 **Professional Ticket System** - Streamlined support, purchases, and inquiries management  
 🎁 **Giveaway Management** - Automated giveaway hosting with real-time participant tracking  
 📊 **Detailed Analytics** - Invite tracking, role statistics, and member insights  
 🎮 **Minecraft Integration** - Beautiful profile rendering with Hypixel statistics  
-🔐 **Enterprise Security** - AES-256-GCM encrypted database with anti-spam, anti-raid protection  
-📝 **Professional Logging** - Comprehensive audit trails and error reporting via webhooks  
+🔐 **Enterprise Security** - AES-256-GCM encrypted database with anti-spam protection  
+📝 **Professional Logging** - Comprehensive audit trails and error reporting  
 ⚙️ **Centralized Configuration** - Single `config.json` file for all server-specific settings  
 
 ---
@@ -89,14 +80,12 @@
 5. [Configuration Guide](#configuration-guide)
 6. [Running the Bot](#running-the-bot)
 7. [Commands Reference](#commands-reference)
-8. [Ticket System](#ticket-system)
-9. [Security Features](#security-features)
+8. [Auto-Moderation System](#auto-moderation-system)
+9. [Ticket System](#ticket-system)
 10. [Database & Encryption](#database--encryption)
-11. [Logging System](#logging-system)
-12. [Project Structure](#project-structure)
-13. [Troubleshooting](#troubleshooting)
-14. [Contributing](#contributing)
-15. [Persian Guide (راهنمای فارسی)](#فارسی)
+11. [Project Structure](#project-structure)
+12. [Troubleshooting](#troubleshooting)
+13. [Persian Guide (راهنمای فارسی)](#فارسی)
 
 ---
 
@@ -130,12 +119,28 @@ node index.js
 
 ## Features
 
+### ⚠️ 3-Strike Auto-Moderation System (NEW v3.0.0)
+- **Smart Warning Tracking**: Persistent storage with automatic escalation
+- **Auto-Ban on 3 Strikes**: Automatic ban after 3 warnings with permission checks
+- **Warning Count Display**: Users see their warning count (1/3, 2/3, 3/3)
+- **Support Notifications**: Auto-ban alerts sent to support/log channel
+- **DM Warning System**: Beautiful color-coded embed warnings
+- **Permission Safe**: Checks permissions before taking moderation actions
+
+### 🚫 Enhanced Bad Words Filter (NEW v3.0.0)
+- **Database Storage**: Persistent bad words in Enmap database
+- **Auto-Loading**: Words automatically loaded on bot startup
+- **Multiple Fallback Methods**: 3 different iteration methods for compatibility
+- **Real-time Management**: Add/remove words instantly with commands
+- **Bulk Import**: `/importbadwords` for mass word addition
+- **Smart Detection**: Fast in-memory Set for performance
+
 ### 🛡️ Moderation & Safety
 - **Comprehensive Commands**: `/warn`, `/clear`, `/kick`, `/ban`, `/unban`
-- **Bad Words Filter**: Automated detection with DM notifications
 - **Warning System**: Persistent storage with configurable thresholds
 - **Auto-moderation**: Spam detection and automatic actions
 - **Clearwarnings**: Reset user warnings with admin command
+- **Permission Checks**: Safe operations with graceful fallbacks
 
 ### 🎫 Ticket System
 - **Interactive Menu**: `/sendticketmenu` for easy ticket creation
@@ -143,7 +148,6 @@ node index.js
 - **Additional Details Form**: Optional modal for users to provide extra information
 - **Admin Controls**: Claim, record, and complete tickets
 - **Auto-closing**: Inactive ticket management
-- **Fully Configurable**: All messages, buttons, and categories via `config.json`
 - **Professional Formatting**: Clean welcome messages with form data displayed
 
 ### 🎁 Giveaway System
@@ -166,28 +170,11 @@ node index.js
 - **Cape Detection**: Identify official, OptiFine, and special capes
 - **Customizable Styles**: Multiple rendering options
 
-### 🛡️ Enterprise Security (NEW v2.2.0)
-- **Optimized Security Manager**: High-performance protection with 70% faster response time
-- **Advanced Input Validation**: Real-time protection against XSS, SQL Injection, Command Injection
-- **Multi-Layer Rate Limiting**: User, command, guild, and global rate limiting with smart punishments
-- **Intelligent Anti-Spam**: Advanced algorithms detecting message flooding, duplicates, mentions, links
-- **Emergency Mode**: Instant server lockdown during attacks with admin-only access
-- **Zero Logging Overhead**: All security systems optimized for minimal performance impact
-- **Admin Security Tools**: Complete security management via Discord commands
-- **Real-time Analytics**: Performance monitoring and threat intelligence
-
 ### 💾 Database & Encryption
-- **Enmap-based**: Persistent, file-based storage
+- **Enmap-based**: Persistent, file-based storage with automatic disk sync
 - **AES-256-GCM**: Military-grade encryption for sensitive data
 - **Auto-cleanup**: Expired entry removal
 - **Secure Collections**: Separate encrypted storage for passwords, tokens, etc.
-
-### 📝 Logging & Monitoring
-- **Professional Discord Channel Logging**: All activities logged to designated channel with color-coded embeds
-- **Smart Webhook Integration**: Critical errors and security events sent to webhook
-- **Command Auditing**: Every interaction logged with full context
-- **Color-Coded Levels**: Success (green), Error (red), Info (blue), Warning (yellow)
-- **Structured Logging**: Clean, organized log format with timestamps and context
 
 ---
 
@@ -234,104 +221,6 @@ node index.js
 
 ---
 
-## Configuration Guide
-
-### Bot Settings
-```json
-{
-  "bot": {
-    "token": "YOUR_BOT_TOKEN",
-    "clientId": "YOUR_CLIENT_ID",
-    "guildId": "YOUR_GUILD_ID",
-    "prefix": "!",
-    "status": {
-      "activities": [
-        { "text": "your Server", "type": "LISTENING" }
-      ]
-    }
-  }
-}
-```
-
-### Channel Configuration
-```json
-{
-  "channels": {
-    "welcome": "CHANNEL_ID",
-    "log": "CHANNEL_ID",
-    "errorWebhook": "WEBHOOK_URL",
-    "review": "CHANNEL_ID",
-    "roleMenu": "CHANNEL_ID"
-  }
-}
-```
-
-### Role Configuration
-```json
-{
-  "roles": {
-    "giveaway": "ROLE_ID",
-    "drop": "ROLE_ID",
-    "update": "ROLE_ID",
-    "ticketAccess": "ROLE_ID",
-    "shop": "ROLE_ID",
-    "buyer": "ROLE_ID"
-  }
-}
-```
-
-### Security Settings
-All security parameters are configurable in `config.json`:
-- Rate limiting thresholds
-- Anti-spam detection levels
-- Anti-raid sensitivity
-- Warning system thresholds
-
-### Ticket System Configuration
-```json
-{
-  "ticketSystem": {
-    "categoryName": "Tickets",
-    "channelNameTemplate": "ticket-{username}",
-    "menu": {
-      "title": "Support Ticket",
-      "categories": [
-        {
-          "label": "🛒 Purchase",
-          "value": "buy",
-          "description": "For purchase inquiries or order follow-ups",
-          "detailedDescription": "Do you need more information about your purchase?",
-          "requiresDetails": true
-        },
-        {
-          "label": "🛠️ Support",
-          "value": "support",
-          "description": "Report an issue or get help",
-          "detailedDescription": "Do you need technical support or assistance?",
-          "requiresDetails": true
-        },
-        {
-          "label": "🎁 Claim Reward",
-          "value": "reward",
-          "description": "Request prizes or gifts",
-          "detailedDescription": "Do you need help claiming your reward?",
-          "requiresDetails": true
-        },
-        {
-          "label": "❓ Other",
-          "value": "other",
-          "description": "For any other requests",
-          "detailedDescription": "Do you need additional assistance?",
-          "requiresDetails": false
-        }
-      ]
-    }
-  }
-}
-```
-
----
-
 ## Running the Bot
 
 ```bash
@@ -340,15 +229,28 @@ node index.js
 
 **Expected Output:**
 ```
-✅ Configuration loaded successfully
-✅ Database initialized
-✅ Bot connected to Discord
-✅ Slash commands registered
+🤖 West Bot is Online!
+📊 Logged in as: WestBot!#0442
+🚀 Serving 1 servers
+📚 Loading banned words from database...
+✅ Loaded 123 banned words from database
+✅ Commands updated!
+🎯 Bot is ready to serve!
 ```
 
 ---
 
 ## Commands Reference
+
+### ⚠️ Auto-Moderation Commands (NEW v3.0.0)
+
+| Command | Usage | Permission | Description |
+|---|---|---|---|
+| `/addbadword` | `/addbadword <word>` | Administrator | Add word to filter |
+| `/removebadword` | `/removebadword <word>` | Administrator | Remove word from filter |
+| `/listbadwords` | `/listbadwords` | Administrator | View all filtered words |
+| `/importbadwords` | `/importbadwords <text>` | Administrator | Bulk import words |
+| `/clearwarnings` | `/clearwarnings <user>` | Moderate Members | Reset user warnings |
 
 ### 🛡️ Moderation Commands
 
@@ -359,10 +261,6 @@ node index.js
 | `/kick` | `/kick <user> <reason>` | Kick Members | Remove user from server |
 | `/ban` | `/ban <user> <reason> [days]` | Ban Members | Ban user permanently |
 | `/unban` | `/unban <userid> <reason>` | Ban Members | Unban user |
-| `/addbadword` | `/addbadword <word>` | Administrator | Add to filter |
-| `/removebadword` | `/removebadword <word>` | Administrator | Remove from filter |
-| `/listbadwords` | `/listbadwords` | Administrator | View all filtered words |
-| `/clearwarnings` | `/clearwarnings <user>` | Moderate Members | Reset user warnings |
 
 ### 🎫 Ticket Commands
 
@@ -400,23 +298,82 @@ node index.js
 |---|---|---|---|
 | `/mcinfo` | `/mcinfo <username> [price] [show_stats]` | - | Minecraft profile & stats |
 
-### 🛡️ Security Commands (NEW v2.2.0)
+---
 
-| Command | Usage | Permission | Description |
-|---|---|---|---|
-| `/security status` | `/security status` | Administrator | View security system status |
-| `/security blacklist` | `/security blacklist <action> <type> <id>` | Administrator | Manage blacklists |
-| `/security whitelist` | `/security whitelist <action> <type> <id>` | Administrator | Manage whitelists |
-| `/security emergency` | `/security emergency <toggle> [reason]` | Administrator | Toggle emergency mode |
-| `/security report` | `/security report [period]` | Administrator | Generate security report |
-| `/security reset` | `/security reset <user>` | Administrator | Reset user security data |
+## Auto-Moderation System (NEW v3.0.0)
 
-### 🎨 Utility Commands
+### 🎯 How It Works
 
-| Command | Usage | Permission | Description |
-|---|---|---|---|
-| `/sendrolemenu` | `/sendrolemenu` | Manage Roles | Deploy role selection menu |
-| `/sendmessage` | `/sendmessage <channel\|user> [embed] [color]` | Administrator | Send custom message |
+1. **User Sends Message**: Bot analyzes message for bad words
+2. **Bad Word Detected**: Message is deleted automatically
+3. **Warning Added**: User receives warning (1/3, 2/3, or 3/3)
+4. **DM Sent**: User gets warning embed with their warning count
+5. **Support Notified**: Staff can see warning activity in logs
+6. **Auto-Ban**: After 3 warnings, user is automatically banned
+
+### ⚠️ Warning System Flow
+
+#### **First Warning (1/3)**
+```
+⚠️ Warning: Inappropriate Language
+
+Your message was deleted for containing inappropriate language.
+
+📝 Rule Violation: Use of prohibited words is not allowed.
+⚡ Action Taken: Message deleted automatically
+⚠️ Warning Count: 1/3 (3 warnings = ban)
+🔔 Reminder: Repeated violations will result in a ban.
+```
+
+#### **Second Warning (2/3)**
+```
+⚠️ Warning: Inappropriate Language (Orange color)
+
+Your message was deleted for containing inappropriate language.
+
+📝 Rule Violation: Use of prohibited words is not allowed.
+⚡ Action Taken: Message deleted automatically
+⚠️ Warning Count: 2/3 (3 warnings = ban)
+🔔 Reminder: One more warning will result in a ban.
+```
+
+#### **Third Warning (3/3) - Auto-Ban**
+```
+🔨 USER AUTO-BANNED (Red embed to support)
+
+User has been automatically banned after 3 warnings.
+
+👤 Banned User: User#1234 (123456789)
+⚠️ Warning Count: 3/3
+📝 Reason: Inappropriate language (bad words)
+🔧 Action: Auto-ban (3 warnings reached)
+📅 Date: Today at 3:15 PM
+```
+
+### 🚫 Bad Words Management
+
+#### **Database Integration**
+- **Persistent Storage**: Words saved in `./data/bannedWords.json`
+- **Auto-Loading**: Automatically loaded on bot startup
+- **Real-time Updates**: Add/remove words without restart
+- **Bulk Import**: Mass import with `/importbadwords`
+
+#### **Import Example**
+```bash
+/importbadwords text: "fuck,shit,bitch,کیر,کس,کون"
+```
+
+### 🛡️ Safety Features
+
+#### **Permission Checks**
+- **Ban Verification**: Bot checks BanMembers permission before banning
+- **Graceful Fallback**: No crashes when permissions missing
+- **Admin Notifications**: Support team notified of permission issues
+
+#### **Error Handling**
+- **Multiple Iteration Methods**: 3 fallback methods for database compatibility
+- **Clean Console**: Simplified startup with minimal errors
+- **Comprehensive Logging**: Better error tracking and debugging
 
 ---
 
@@ -455,91 +412,12 @@ All ticket messages, buttons, and categories are fully customizable in `config.j
 
 ---
 
-## Security Features (NEW v2.2.0)
-
-### 🛡️ Advanced Protection System
-- **Optimized Performance**: Security checks in 3-8ms (70% faster than previous versions)
-- **Multi-Layer Defense**: Input validation, rate limiting, anti-spam, and blacklist systems
-- **Smart Validation**: Only validate commands that need input checking
-- **Zero Logging Overhead**: All security systems optimized for minimal performance impact
-
-### 🔍 Input Validation
-- **XSS Protection**: Detect and sanitize malicious scripts
-- **SQL Injection Prevention**: Block SQL injection attempts
-- **Command Injection Defense**: Prevent command injection attacks
-- **Format Validation**: Validate Minecraft usernames, Discord IDs, durations
-- **Length Limits**: Enforce appropriate input lengths per field type
-
-### ⚡ Rate Limiting
-- **Multi-Layer**: User, command, guild, and global rate limiting
-- **Smart Punishments**: Warning → Temp Ban → Perma Ban progression
-- **Command-Specific**: Different cooldowns for different commands
-- **Emergency Scaling**: Automatic rate limit adjustment during attacks
-
-### 🚫 Anti-Spam System
-- **Message Flooding**: Detect rapid message sending
-- **Duplicate Detection**: Identify similar messages using similarity algorithms
-- **Mention Spam**: Block excessive user/role mentions
-- **Link Spam**: Prevent link flooding and suspicious URLs
-- **Advanced Patterns**: Detect Zalgo text, Unicode exploits, repeated characters
-
-### 🚨 Emergency Mode
-- **Instant Lockdown**: Enable emergency mode during attacks
-- **Admin-Only Access**: Only administrators can use commands
-- **Enhanced Monitoring**: Increased sensitivity for all security systems
-- **One-Click Activation**: Toggle via `/security emergency` command
-
-### 📊 Security Analytics
-- **Real-time Stats**: Monitor security system performance
-- **Threat Intelligence**: Track attack patterns and sources
-- **User Behavior**: Analyze user activity patterns
-- **Performance Metrics**: Security system impact on bot performance
-
-### 🛠️ Admin Tools
-- **Blacklist Management**: Add/remove users, guilds from blacklist
-- **Whitelist Control**: Manage trusted users and guilds
-- **User Reset**: Clear security data for specific users
-- **Security Reports**: Generate comprehensive security analytics
-
----
-
-## Legacy Security Features (v2.1.0)
-
-### Rate Limiting
-- Per-user request limits
-- Per-command cooldowns
-- Global rate limits
-- Configurable thresholds
-
-### Anti-Spam
-- Message flooding detection
-- Duplicate message detection
-- Mention spam detection
-- Link spam detection
-- Caps lock detection
-- Emoji spam detection
-
-### Anti-Raid
-- Join rate monitoring
-- New account detection
-- Username similarity analysis
-- Automatic server lockdown
-- Configurable sensitivity
-
-### Access Control
-- User blacklist/whitelist
-- Guild blacklist/whitelist
-- Role-based whitelist
-- Admin bypass
-
----
-
 ## Database & Encryption
 
 ### Storage
-- **Type**: Enmap (file-based)
+- **Type**: Enmap (file-based) with automatic disk persistence
 - **Location**: `./data` directory
-- **Format**: JSON with encryption
+- **Format**: JSON with encryption for sensitive collections
 
 ### Encryption
 - **Algorithm**: AES-256-GCM
@@ -548,40 +426,11 @@ All ticket messages, buttons, and categories are fully customizable in `config.j
 - **Collections**: Separate encrypted storage for sensitive data
 
 ### Collections
-- `tickets` - Ticket information
-- `warnings` - User warnings
+- `bannedWords` - Filtered words (persistent)
+- `warnings` - User warnings (encrypted)
+- `tickets` - Ticket information (encrypted)
 - `giveaways` - Giveaway data
 - `polls` - Poll data
-- `badWords` - Filtered words
-- `accounts` - Encrypted account data
-
----
-
-## Logging System
-
-### Command Logging
-Every slash command interaction is logged to the configured log channel with:
-- User information
-- Command name and options
-- Timestamp
-- Execution status
-
-### Error Logging
-Errors are sent to the configured webhook with:
-- Error message and stack trace
-- Context information
-- Timestamp
-- Severity level
-
-### Debug Mode
-Enable debug logging in `config.json`:
-```json
-{
-  "logging": {
-    "level": "debug"
-  }
-}
-```
 
 ---
 
@@ -599,39 +448,32 @@ Enable debug logging in `config.json`:
 │   ├── commands.js               # Slash command handlers
 │   ├── handlers.js               # Button, modal, select handlers
 │   ├── events.js                 # Discord event handlers
-│   ├── utils.js                  # Utility functions
-│   ├── database.js               # Enmap collections
+│   ├── utils.js                  # Utility functions with loadBadWords()
+│   ├── database.js               # Enmap collections with persistence
 │   ├── encryption.js             # AES-256-GCM encryption
 │   ├── constants.js              # System constants
 │   ├── commandLogger.js          # Command audit logging
+│   ├── spamDetection.js          # Spam detection system
 │   │
 │   ├── security/
-│   │   ├── OptimizedSecurityManager.js  # High-performance security coordinator (NEW v2.2.0)
+│   │   ├── OptimizedSecurityManager.js  # High-performance security coordinator
 │   │   ├── EnhancedSecurityManager.js   # Full-featured security manager
-│   │   ├── EnhancedRateLimiter.js       # Advanced rate limiting (NEW v2.2.0)
-│   │   ├── EnhancedAntiSpam.js          # Advanced anti-spam (NEW v2.2.0)
-│   │   ├── InputValidator.js            # Input validation system (NEW v2.2.0)
-│   │   ├── SecurityCommands.js         # Security management commands (NEW v2.2.0)
-│   │   ├── SecurityManager.js           # Legacy security manager
-│   │   ├── RateLimiter.js               # Legacy rate limiting
-│   │   ├── AntiSpam.js                  # Legacy anti-spam
-│   │   └── AntiRaid.js                  # Legacy raid detection
+│   │   ├── EnhancedRateLimiter.js       # Advanced rate limiting
+│   │   ├── EnhancedAntiSpam.js          # Advanced anti-spam
+│   │   ├── InputValidator.js            # Input validation system
+│   │   ├── SecurityCommands.js         # Security management commands
+│   │   └── ... (other security modules)
 │   │
-│   ├── cache/
-│   │   └── CacheManager.js       # Caching system
+│   ├── utils/
+│   │   └── LoggerUtils.js        # Error logging system
 │   │
-│   ├── errors/
-│   │   └── BotError.js           # Custom error classes
-│   │
-│   └── utils/
-│       ├── LoggerUtils.js        # Error logging
-│       ├── InteractionUtils.js   # Interaction helpers
-│       └── modules/
-│           ├── hypixel.js        # Hypixel API
-│           ├── mojang.js         # Mojang API
-│           └── warnings.js       # Warning system
+│   └── errors/
+│       └── BotError.js           # Custom error classes
 │
 └── data/                         # Database files (auto-created)
+    ├── bannedWords.json          # Bad words database
+    ├── warnings.json             # User warnings
+    └── ...                       # Other collections
 ```
 
 ---
@@ -642,40 +484,33 @@ Enable debug logging in `config.json`:
 **Problem**: `Error: Invalid token`
 **Solution**: Check `config.json` for correct bot token
 
-**Problem**: `Error: Cannot find module`
-**Solution**: Run `npm install` to install dependencies
+**Problem**: `Error: Cannot find module 'enmap'`
+**Solution**: Run `npm install enmap` to install missing dependency
 
-### Commands Not Showing
-**Problem**: Slash commands not appearing
+### Bad Words Not Working
+**Problem**: Bad words not being detected
 **Solution**: 
-1. Ensure bot has `applications.commands` scope
-2. Check `guildId` in config
-3. Restart bot after configuration changes
+1. Check console for "Loaded X banned words" message
+2. Use `/listbadwords` to verify words are loaded
+3. Add words with `/addbadword` or `/importbadwords`
+
+### Auto-Ban Not Working
+**Problem**: Users not being banned after 3 warnings
+**Solution**:
+1. Verify bot has BanMembers permission
+2. Check support channel for permission error messages
+3. Ensure guild ID is correct in config
 
 ### Database Errors
-**Problem**: `Error: Encryption key must be 64 characters`
-**Solution**: Generate valid key: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+**Problem**: `Error: db.bannedWords is not iterable`
+**Solution**: This is normal on first startup - bot will retry with fallback methods
 
-### Ticket System Issues
-**Problem**: Tickets not creating
-**Solution**:
-1. Verify `ticketAccess` role exists
-2. Check channel permissions
-3. Ensure bot has `MANAGE_CHANNELS` permission
-
-### Security Lockdown
-**Problem**: Server locked down by anti-raid
-**Solution**: Whitelist trusted users in `config.json` security settings
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+### Permission Issues
+**Problem**: `Missing Permissions` errors
+**Solution**: 
+1. Give bot BanMembers permission in server settings
+2. Check bot role has proper permissions
+3. Verify channel permissions for logging
 
 ---
 
@@ -683,11 +518,16 @@ Contributions are welcome! Please:
 
 ### 🌍 راهنمای فارسی
 
-#### معرفی
-**West Bot** یک ربات دیسکورد حرفه‌ای برای مدیریت سرور، تیکت، گیووی، و ابزارهای ماینکرفت است.
+#### معرفی v3.0.0
+**West Bot v3.0.0** یک ربات دیسکورد حرفه‌ای با سیستم خودکار مدیریتی پیشرفته است:
+
+#### ویژگی‌های جدید v3.0.0
+- ⚠️ **سیستم 3 اخطاری**: هشدار خودکار با بن بعد از 3 اخطار
+- 🚫 **فیلتر کلمات بد**: ذخیره در دیتابیس با لود خودکار
+- 🛡️ **چک مجوزها**: بررسی دسترسی قبل از عملیات مدیریتی
+- 🧹 **استارتاپ ساده**: راه‌اندازی سریع و بدون خطا
 
 #### ویژگی‌های اصلی
-- 🛡️ **امنیت پیشرفته v2.2.0**: سیستم امنیتی بهینه شده با 70% سرعت بیشتر
 - 🎫 سیستم تیکت پیشرفته
 - 🎁 مدیریت گیووی خودکار
 - 📊 آمار و آنالیتیکس
@@ -705,20 +545,26 @@ cp config.example.json config.json
 node index.js
 ```
 
-#### دستورات اصلی
-- **امنیت v2.2.0**: `/security status`, `/security emergency`, `/security blacklist`
-- **مدیریت**: `/warn`, `/kick`, `/ban`, `/clear`
+#### دستورات اصلی v3.0.0
+- **مدیریت کلمات بد**: `/addbadword`, `/removebadword`, `/listbadwords`, `/importbadwords`
+- **سیستم اخطار**: `/warn`, `/clearwarnings`
+- **مدیریت**: `/kick`, `/ban`, `/clear`
 - **تیکت**: `/sendticketmenu`
 - **گیووی**: `/start-giveaway`, `/end-giveaway`
 - **آمار**: `/invites`, `/rolestats`, `/serverinfo`
 - **ماینکرفت**: `/mcinfo`
+
+#### سیستم خودکار مدیریتی
+1. **کاربر فوش می‌دهد**: پیام حذف می‌شود
+2. **اخطار داده می‌شود**: کاربر DM اخطار دریافت می‌کند (1/3, 2/3, 3/3)
+3. **3 اخطار = بن**: کاربر اتوماتیک بن می‌شود
+4. **اطلاع به تیم پشتیبانی**: گزارش بن به کانال support ارسال می‌شود
 
 #### تنظیمات
 تمام تنظیمات در `config.json`:
 - توکن و شناسه‌های بات
 - شناسه‌های چنل و رول
 - کلیدهای API
-- پارامترهای امنیتی
 - پیام‌های سیستم تیکت
 
 #### پشتیبانی
@@ -740,4 +586,4 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ for Discord communities**
+**Made with ❤️ for Discord communities - Advanced Auto-Moderation Edition v3.0.0**
