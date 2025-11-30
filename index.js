@@ -44,9 +44,17 @@ const logger = new LoggerUtils({
 // Initialize optimized security manager only if module exists
 let securityManager = null;
 if (OptimizedSecurityManager) {
-    securityManager = new OptimizedSecurityManager({
-        adminIds: config.security?.adminIds || []
-    });
+    try {
+        securityManager = new OptimizedSecurityManager({
+            adminIds: config.security?.adminIds || []
+        });
+        console.log('✅ OptimizedSecurityManager initialized successfully');
+    } catch (error) {
+        console.error('❌ Failed to initialize OptimizedSecurityManager:', error);
+        securityManager = null;
+    }
+} else {
+    console.warn('⚠️ OptimizedSecurityManager not available');
 }
 
 // Print configuration (only in debug mode and not showing logs)
@@ -184,8 +192,8 @@ client.once(Events.ClientReady, async () => {
 // Event: Interaction (Slash Commands) with enhanced security
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
-        // Enhanced security check only if security manager exists
-        if (securityManager) {
+        // Enhanced security check only if security manager exists and has the method
+        if (securityManager && typeof securityManager.checkInteractionSecurity === 'function') {
             const securityCheck = await securityManager.checkInteractionSecurity(interaction);
             if (!securityCheck.allowed) {
                 try {
