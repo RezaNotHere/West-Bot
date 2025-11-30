@@ -876,15 +876,12 @@ async function handleButton(interaction, client, env) {
 
         try {
             // Generate HTML transcript using the transcript system
-            const transcriptPath = await transcript.createTranscriptFile(channel);
+            const transcriptAttachment = await transcript.createTranscriptFile(channel);
             
-            // Send transcript as file
+            // Send transcript as attachment
             await interaction.editReply({
                 content: '📋 ترنسکریپت ساخته شد',
-                files: [{
-                    attachment: transcriptPath,
-                    name: `transcript-${channel.id}.html`
-                }]
+                files: [transcriptAttachment]
             });
 
         } catch (error) {
