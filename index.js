@@ -101,6 +101,9 @@ events.setLogger(logger);
 
 const commandLogger_ins = new (require('./src/commandLogger'))();
 
+// Import spam detection
+const spamDetection = require('./src/spamDetection');
+
 // Event: Ready
 client.once(Events.ClientReady, async () => {
     // 🚫 Prevent duplicate startup screens
@@ -353,6 +356,22 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     
     try {
+        // 🚨 Spam Detection
+        const isSpamming = await spamDetection.isSpam(message);
+        if (isSpamming) {
+            // Delete spam messages
+            await message.delete().catch(() => {});
+            
+            // Log spam detection
+            await logger.logInfo('Spam Detected', {
+                User: `${message.author.tag} (${message.author.id})`,
+                Channel: `${message.channel.name} (${message.channel.id})`,
+                MessageCount: spamDetection.getMessageCount(message.author.id)
+            });
+            
+            return; // Stop processing
+        }
+        
         // Security checks
         if (securityManager) {
             const securityCheck = await securityManager.checkMessage(message);
