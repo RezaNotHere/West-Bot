@@ -249,9 +249,14 @@ async function getWarnings(userId) {
 
 async function sendWarningDM(member, warningCount, maxWarnings, reason, moderator) {
     try {
+        const warningMessages = config.messages?.moderation || {};
+        const colors = config.colors || {};
+        
         const warningEmbed = new EmbedBuilder()
-            .setColor(warningCount >= maxWarnings ? 'Red' : 'Orange')
-            .setTitle(warningCount >= maxWarnings ? '🔨 شما از سرور بن شدید' : '⚠️ اخطار از مدیریت سرور')
+            .setColor(warningCount >= maxWarnings ? (colors.error || '#e74c3c') : (colors.warning || '#f39c12'))
+            .setTitle(warningCount >= maxWarnings 
+                ? (warningMessages.banned || '🔨 شما از سرور بن شدید') 
+                : (warningMessages.warned || '⚠️ اخطار از مدیریت سرور'))
             .setDescription(warningCount >= maxWarnings 
                 ? `شما به دلیل دریافت ${maxWarnings} اخطار از سرور حذف شدید.`
                 : `شما یک اخطار از مدیریت سرور دریافت کردید.`
@@ -661,6 +666,19 @@ async function sendProfileImageEmbed(interaction, uuid, capeUrls, hypixelStats) 
     }
 }
 
+// --- Helper Functions ---
+
+function getButtonStyle(styleName) {
+    const styles = {
+        'Primary': ButtonStyle.Primary,
+        'Secondary': ButtonStyle.Secondary,
+        'Success': ButtonStyle.Success,
+        'Danger': ButtonStyle.Danger,
+        'Link': ButtonStyle.Link
+    };
+    return styles[styleName] || ButtonStyle.Primary;
+}
+
 // --- Ticket System ---
 
 async function ensureTicketCategory(guild, categoryName) {
@@ -710,8 +728,8 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
     
     const welcomeEmbed = new EmbedBuilder()
         .setColor(ticketConfig.embedColor || '#0099ff')
-        .setTitle(ticketConfig.embedTitle || '🎟️ Support Ticket')
-        .setDescription(`Hello ${user},\n\nThank you for creating a ticket. Our support team will be with you shortly.\n\n**Subject:** ${finalReason}`)
+        .setTitle(ticketConfig.welcomeMessage?.title?.replace('{username}', user.username).replace('{user_tag}', user.tag) || '🎟️ Support Ticket')
+        .setDescription(ticketConfig.welcomeMessage?.description?.replace('{username}', user.username).replace('{user_tag}', user.tag).replace('{reason}', finalReason) || `Hello ${user},\n\nThank you for creating a ticket. Our support team will be with you shortly.\n\n**Subject:** ${finalReason}`)
         .addFields(
             { name: 'Created By', value: `${user.tag} (${user.id})`, inline: true },
             { name: 'Ticket ID', value: `#${ticketNumber}`, inline: true },
@@ -723,25 +741,6 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
     if (additionalDetails) {
         welcomeEmbed.addFields({
             name: 'Additional Details',
-            value: additionalDetails.length > 1024 ? additionalDetails.substring(0, 1021) + '...' : additionalDetails,
-            inline: false
-        });
-    }
-
-    const userButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('complete_purchase').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('close_ticket_user').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
-    );
-
-    const adminButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('record_order_admin').setLabel('📝 Record Order').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
-    );
-
-    const mentionText = `<@${user.id}> <@&${TICKET_CATEGORY_ID}>`;
-
-    await ticketChannel.send({ 
         content: mentionText, 
         embeds: [welcomeEmbed], 
         components: [userButtons, adminButtons]
