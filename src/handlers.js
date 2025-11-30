@@ -186,13 +186,7 @@ async function handleButton(interaction, client, env) {
             const closeEmbed = new EmbedBuilder()
                 .setColor('#FFA500')
                 .setTitle('🔒 تیکت بسته شد')
-                .setDescription(`تیکت شما بسته شد. اگر نیاز به کمک بیشتری دارید، لطفاً تیکت جدیدی باز کنید.\n\nتیکت به آرشیو منتقل شد و دیگر نمی‌توانید در آن پیام ارسال کنید.`)
-                .addFields(
-                    { name: 'بسته شده توسط', value: `${user.tag}`, inline: true },
-                    { name: 'زمان بسته شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
-                )
-                .setFooter({ text: 'با تشکر از تماس شما' })
-                .setTimestamp();
+                .setDescription(`تیکت شما بسته شد و به آرشیو منتقل شد.\n\nاگر نیاز به کمک بیشتری دارید، لطفاً تیکت جدیدی باز کنید.`);
 
             // Update database and send message in parallel
             await Promise.all([
@@ -340,13 +334,7 @@ async function handleButton(interaction, client, env) {
         const claimEmbed = new EmbedBuilder()
             .setColor('#9B59B6')
             .setTitle('👤 تیکت تصدی شد')
-            .setDescription(`این تیکت توسط <@${user.id}> تصدی شد و اکنون در حال بررسی است.\n\nتیم پشتیبانی به زودی به درخواست شما رسیدگی خواهد کرد.`)
-            .addFields(
-                { name: '👤 تصدی شده توسط', value: `<@${user.id}>`, inline: true },
-                { name: '⏰ زمان تصدی', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
-            )
-            .setFooter({ text: 'سیستم تیکت' })
-            .setTimestamp();
+            .setDescription(`این تیکت توسط <@${user.id}> تصدی شد و اکنون در حال بررسی است.`);
 
         await Promise.all([
             db.ticketInfo.set(channel.id, { ...ticketInfo, claimedBy: user.id, status: 'claimed' }),
@@ -506,14 +494,7 @@ async function handleButton(interaction, client, env) {
         const completionEmbed = new EmbedBuilder()
             .setColor('#2ECC71')
             .setTitle('✅ سفارش تکمیل شد')
-            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} با موفقیت تکمیل و تحویل داده شد.\n\nکاربر اطلاع‌رسانی شده و می‌تواند نظر خود را ثبت کند.`)
-            .addFields(
-                { name: '👤 مشتری', value: `<@${owner.id}>`, inline: true },
-                { name: '🛠️ تکمیل شده توسط', value: `${interaction.user}`, inline: true },
-                { name: '⏰ زمان تکمیل', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
-            )
-            .setFooter({ text: 'سیستم تیکت' })
-            .setTimestamp();
+            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} با موفقیت تکمیل و تحویل داده شد.\n\nکاربر اطلاع‌رسانی شده و می‌تواند نظر خود را ثبت کند.`);
 
         await interaction.reply({ embeds: [completionEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} تکمیل شد.`);
@@ -566,14 +547,7 @@ async function handleButton(interaction, client, env) {
         const recordEmbed = new EmbedBuilder()
             .setColor('#3498DB')
             .setTitle('📝 سفارش ثبت شد')
-            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} ثبت شد و در صف پردازش قرار گرفت.\n\nکاربر اطلاع‌رسانی شده و منتظر تکمیل سفارش است.`)
-            .addFields(
-                { name: '👤 مشتری', value: `<@${owner.id}>`, inline: true },
-                { name: '📋 ثبت شده توسط', value: `${interaction.user}`, inline: true },
-                { name: '⏰ زمان ثبت', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
-            )
-            .setFooter({ text: 'سیستم تیکت' })
-            .setTimestamp();
+            .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} ثبت شد و در صف پردازش قرار گرفت.\n\nکاربر اطلاع‌رسانی شده و منتظر تکمیل سفارش است.`);
 
         await interaction.reply({ embeds: [recordEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} ثبت شد.`);
@@ -670,14 +644,8 @@ async function handleButton(interaction, client, env) {
             // Send reopen message with embed
             const reopenEmbed = new EmbedBuilder()
                 .setColor('#3498DB')
-                .setTitle('🔓 تیکت مجدداً باز شد')
-                .setDescription(`این تیکت توسط <@${user.id}> مجدداً باز شد.\n\nاکنون می‌توانید پیام‌های جدید ارسال کنید و با تیم پشتیبانی در ارتباط باشید.`)
-                .addFields(
-                    { name: '👤 باز شده توسط', value: `<@${user.id}>`, inline: true },
-                    { name: '⏰ زمان باز شدن', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
-                )
-                .setFooter({ text: 'سیستم تیکت' })
-                .setTimestamp();
+                .setTitle('🔓 تیکت باز شد')
+                .setDescription(`این تیکت توسط <@${user.id}> باز شد.\n\nاکنون می‌توانید پیام‌های جدید ارسال کنید.`);
 
             await channel.send({ embeds: [reopenEmbed] });
 
@@ -787,8 +755,7 @@ async function handleButton(interaction, client, env) {
                 const deleteEmbed = new EmbedBuilder()
                     .setColor('Red')
                     .setTitle('🗑️ تیکت حذف شد')
-                    .setDescription(`تیکت توسط ${user.tag} حذف شد.`)
-                    .setTimestamp();
+                    .setDescription(`تیکت توسط ${user.tag} حذف شد.`);
                 await channel.send({ embeds: [deleteEmbed] });
 
                 // Update interaction BEFORE deleting channel
@@ -904,56 +871,20 @@ async function handleButton(interaction, client, env) {
         // Quick reply first, then process transcript in background
         const processingEmbed = new EmbedBuilder()
             .setColor('Yellow')
-            .setDescription('⏳ در حال ساخت ترنسکریپت... لطفاً صبر کنید.');
+            .setDescription('⏳ در حال ساخت ترنسکریپت...');
         await interaction.editReply({ embeds: [processingEmbed] });
 
         try {
-            // Process transcript in background to avoid blocking
-            setImmediate(async () => {
-                try {
-                    // Fetch all messages in the ticket (limit to 50 for performance)
-                    const messages = await channel.messages.fetch({ limit: 50 });
-                    
-                    // Create transcript content
-                    let transcript = `📋 ترنسکریپت تیکت: ${channel.name}\n`;
-                    transcript += `👤 صاحب تیکت: <@${db.ticketInfo.get(channel.id)?.ownerId}>\n`;
-                    transcript += `⏰ زمان ساخت: <t:${Math.floor((db.ticketInfo.get(channel.id)?.createdAt || Date.now()) / 1000)}:F>\n`;
-                    transcript += `📝 دلیل: ${db.ticketInfo.get(channel.id)?.reason || 'نامشخص'}\n`;
-                    transcript += `${'='.repeat(50)}\n\n`;
-
-                    messages.forEach(msg => {
-                        transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content}\n`;
-                        if (msg.attachments.size > 0) {
-                            transcript += `[فایل(ها): ${msg.attachments.map(a => a.url).join(', ')}]\n`;
-                        }
-                        transcript += '\n';
-                    });
-
-                    // Send transcript as a file or in chunks
-                    if (transcript.length > 2000) {
-                        // Send as chunks
-                        const chunks = transcript.match(/.{1,2000}/g) || [];
-                        for (let i = 0; i < chunks.length; i++) {
-                            await interaction.followUp({
-                                content: `\`\`\`\n📋 ترنسکریپت (بخش ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\`\`\``,
-                                flags: MessageFlags.Ephemeral
-                            });
-                        }
-                    } else {
-                        await interaction.editReply({
-                            content: `\`\`\`\n📋 ترنسکریپت تیکت:\n\n${transcript}\n\`\`\``
-                        });
-                    }
-
-                    await logAction(guild, `📋 Transcript created for ticket ${channel.name} by ${user.tag}.`);
-
-                } catch (error) {
-                    console.error('Error creating transcript:', error);
-                    const errorEmbed = new EmbedBuilder()
-                        .setColor('Red')
-                        .setDescription('❌ خطا در ساخت ترنسکریپت. لطفاً دوباره تلاش کنید.');
-                    await interaction.editReply({ embeds: [errorEmbed] });
-                }
+            // Generate HTML transcript using the transcript system
+            const transcriptPath = await transcript.createTranscriptFile(channel);
+            
+            // Send transcript as file
+            await interaction.editReply({
+                content: '📋 ترنسکریپت ساخته شد',
+                files: [{
+                    attachment: transcriptPath,
+                    name: `transcript-${channel.id}.html`
+                }]
             });
 
         } catch (error) {
@@ -1344,120 +1275,98 @@ async function handleModal(interaction, client, env) {
             }
         }
     }
-    else if (customId.startsWith('sendmessage_modal_')) {
-        // Check if interaction is already replied/deferred
-        if (interaction.replied || interaction.deferred) {
-            return;
+else if (customId.startsWith('sendmessage_modal_')) {
+    // Check if interaction is already replied/deferred
+    if (interaction.replied || interaction.deferred) {
+        return;
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        const parts = customId.split('_');
+        const targetId = parts[2];
+        const useEmbed = parts[3] === 'true';
+        const color = parts[4] || 'Blue';
+        const text = fields.getTextInputValue('message_text');
+        const embedTitle = useEmbed ? (fields.getTextInputValue('embed_title') || null) : null;
+
+        // Color presets
+        const colorMap = {
+            Blue: 0x3498db,
+            Green: 0x2ecc71,
+            Red: 0xe74c3c,
+            Yellow: 0xf1c40f,
+            Orange: 0xe67e22,
+            Purple: 0x9b59b6,
+            Grey: 0x95a5a6
+        };
+        const embedColor = colorMap[color] || colorMap['Blue'];
+
+        // Create message content
+        let messageContent;
+        if (useEmbed) {
+            const embed = new EmbedBuilder()
+                .setColor(embedColor)
+                .setDescription(text)
+                .setFooter({ text: `ارسال شده توسط ${interaction.user.tag} از سرور ${guild.name}` })
+                .setTimestamp();
+
+            if (embedTitle) {
+                embed.setTitle(embedTitle);
+            }
+            messageContent = { embeds: [embed] };
+        } else {
+            messageContent = { content: text };
         }
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        try {
-            const parts = customId.split('_');
-            const targetId = parts[2];
-            const useEmbed = parts[3] === 'true';
-            const color = parts[4] || 'Blue';
-            const text = fields.getTextInputValue('message_text');
-            const embedTitle = useEmbed ? (fields.getTextInputValue('embed_title') || null) : null;
+        // Try DM first
+        const target = await interaction.client.users.fetch(targetId).catch(() => null);
 
-            // Color presets
-            const colorMap = {
-                Blue: 0x3498db,
-                Green: 0x2ecc71,
-                Red: 0xe74c3c,
-                Yellow: 0xf1c40f,
-                Orange: 0xe67e22,
-                Purple: 0x9b59b6,
-                Grey: 0x95a5a6
-            };
-            const embedColor = colorMap[color] || colorMap['Blue'];
+        if (target) {
+            // DM send
+            await target.send(messageContent);
+            await interaction.editReply({
+                content: `✅ Message sent successfully to ${target.tag}.`
+            });
+            await logAction(guild, `📩 ${interaction.user.tag} پیامی به کاربر ${target.tag} ارسال کرد.`);
 
-            // Create message content
-            let messageContent;
-            if (useEmbed) {
-                const embed = new EmbedBuilder()
-                    .setColor(embedColor)
-                    .setDescription(text)
-                    .setFooter({ text: `ارسال شده توسط ${interaction.user.tag} از سرور ${guild.name}` })
-                    .setTimestamp();
+            if (logger) {
+                await logger.logModeration('Message Sent (DM)', interaction.user, target, {
+                    MessageType: useEmbed ? 'Embed' : 'Text',
+                    Color: color
+                });
+            }
+        } else {
+            // Send to channel
+            const channel = await interaction.client.channels.fetch(targetId).catch(() => null);
 
-                if (embedTitle) {
-                    embed.setTitle(embedTitle);
-                }
-                messageContent = { embeds: [embed] };
-            } else {
-                messageContent = { content: text };
+            if (!channel) {
+                throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
             }
 
-            // Try to send to user first
-            const target = await interaction.client.users.fetch(targetId).catch(() => null);
+            await channel.send(messageContent);
+            await interaction.editReply({
+                content: `✅ Message sent successfully to channel ${channel.name}.`
+            });
 
-            if (target) {
-                try {
-                    await target.send(messageContent);
-                    await interaction.editReply({
-                        content: `✅ Message sent successfully to ${target.tag}.`
-                    });
-                    await logAction(guild, `📩 ${interaction.user.tag} پیامی به کاربر ${target.tag} ارسال کرد.`);
-                    
-                    if (logger) {
-                        await logger.logModeration('Message Sent (DM)', interaction.user, target, {
-                            MessageType: useEmbed ? 'Embed' : 'Text',
-                            Color: color
-                        });
-                    }
-                } catch (dmError) {
-                    throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
-                }
-            } else {
-                // If not a user, try to send to channel
-                const channel = await interaction.client.channels.fetch(targetId);
-                if (!channel) {
-                    throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
-                }
-                await channel.send(messageContent);
-                await interaction.editReply({
-                    content: `✅ Message sent successfully to channel ${channel.name}.`
-                });
-                await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
-                
-                if (logger) {
-                    await logger.logModeration('Message Sent (Channel)', interaction.user, 
-                        { tag: 'System', id: '0' }, {
+            await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
+
+            if (logger) {
+                await logger.logModeration('Message Sent (Channel)', interaction.user,
+                    { tag: 'System', id: '0' }, {
                         Channel: `${channel.name} (${channel.id})`,
                         MessageType: useEmbed ? 'Embed' : 'Text',
                         Color: color
                     });
-                }
             }
-        } catch (dmError) {
-            throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
         }
-    } else {
-        // If not a user, try to send to channel
-        const channel = await interaction.client.channels.fetch(targetId);
-        if (!channel) {
-            throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
-        }
-        await channel.send(messageContent);
+
+    } catch (error) {
+        console.error('Error in sendmessage modal:', error);
         await interaction.editReply({
-            content: `✅ Message sent successfully to channel ${channel.name}.`
+            content: `❌ Error sending message: ${error.message}`
         });
-        await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
-        
-        if (logger) {
-            await logger.logModeration('Message Sent (Channel)', interaction.user, 
-                { tag: 'System', id: '0' }, {
-                Channel: `${channel.name} (${channel.id})`,
-                MessageType: useEmbed ? 'Embed' : 'Text',
-                Color: color
-            });
-        }
     }
-} catch (error) {
-    console.error('Error in sendmessage modal:', error);
-    await interaction.editReply({
-        content: `❌ Error sending message: ${error.message}`
-    });
 }
 }
 
