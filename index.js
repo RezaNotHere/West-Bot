@@ -1,6 +1,12 @@
 // index.js
 // 🔧 All configuration is now in config.json (loaded via configManager.js) - NO .env file needed!
-const { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, Partials } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    Partials,
+    Events,
+    EmbedBuilder 
+} = require('discord.js');
 const config = require('./configManager');
 const { db, dbManager } = require('./src/database');
 const utils = require('./src/utils');
@@ -368,6 +374,45 @@ client.on(Events.MessageCreate, async (message) => {
                 Channel: `${message.channel.name} (${message.channel.id})`,
                 MessageCount: spamDetection.getMessageCount(message.author.id)
             });
+            
+            return; // Stop processing
+        }
+        
+        // 🚫 Bad Words Detection
+        const utils = require('./src/utils');
+        if (utils.isBadWord(message.content)) {
+            // Delete message with bad words
+            await message.delete().catch(() => {});
+            
+            // Send warning to user
+            const warningEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setTitle('⚠️ Warning: Inappropriate Language')
+                .setDescription('Your message was deleted for containing inappropriate language.')
+                .addFields(
+                    { name: '📝 Rule Violation', value: 'Use of prohibited words is not allowed.', inline: false },
+                    { name: '⚡ Action Taken', value: 'Message deleted automatically', inline: false },
+                    { name: '🔔 Reminder', value: 'Repeated violations may result in a ban.', inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'West Bot Moderation System' });
+            
+            try {
+                await message.author.send({ embeds: [warningEmbed] });
+            } catch (dmError) {
+                // Can't send DM, ignore
+            }
+            
+            // Log bad word detection
+            await logger.logModeration('Bad Word Detected', 
+                message.guild.members.me || { tag: 'System', id: '0' },
+                message.author,
+                {
+                    Channel: `${message.channel.name} (${message.channel.id})`,
+                    Message: message.content.substring(0, 100),
+                    Action: 'Message deleted + Warning sent'
+                }
+            );
             
             return; // Stop processing
         }
