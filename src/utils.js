@@ -1,4 +1,4 @@
-// utils.js
+// utils.js - Enhanced Modular Version v2.3.0
 const { 
     EmbedBuilder, 
     ActionRowBuilder, 
@@ -11,19 +11,38 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const axios = require('axios');
-const { db } = require('./database'); // مطمئن شوید فایل database.js وجود دارد
+const { db } = require('./database');
 const config = require('../configManager');
 
-// --- Global Variables & Cache ---
-const commands = [];
-const cache = new Map();
+// --- Enhanced Configuration & Constants ---
 const CACHE_DURATION = 5 * 60 * 1000;
 const COLOR_PRESETS = {
-    DEFAULT: "#006400" // Dark Green
+    DEFAULT: "#006400",
+    SUCCESS: "#00FF00",
+    WARNING: "#FFA500",
+    ERROR: "#FF0000",
+    INFO: "#0099FF"
 };
 
-// Bad Words Set (In-Memory)
+// Enhanced API Configuration
+const API_CONFIG = {
+    MOJANG: {
+        BASE_URL: 'https://api.mojang.com',
+        TIMEOUT: 10000,
+        RETRY_ATTEMPTS: 3
+    },
+    HYPIXEL: {
+        BASE_URL: 'https://api.hypixel.net',
+        TIMEOUT: 10000,
+        RETRY_ATTEMPTS: 2
+    }
+};
+
+// --- Global State Management ---
+const commands = [];
+const cache = new Map();
 const badWords = new Set();
+const rateLimits = new Map(); // New: Rate limiting for API calls
 
 // Client & Logger References
 let client = null;
@@ -32,7 +51,7 @@ let logger = null;
 function setClient(c) { client = c; }
 function setLogger(l) { logger = l; }
 
-// --- Utility Functions ---
+// --- Enhanced Utility Functions ---
 
 function ms(str) {
     if (!str) return 0;
@@ -42,13 +61,79 @@ function ms(str) {
     return parseInt(match[1], 10) * unitMap[match[2]];
 }
 
-async function logAction(guild, message) {
+// New: Enhanced rate limiting
+function checkRateLimit(key, limit = 5, window = 60000) {
+    const now = Date.now();
+    const userRequests = rateLimits.get(key) || [];
+    
+    // Remove old requests
+    const validRequests = userRequests.filter(time => now - time < window);
+    
+    if (validRequests.length >= limit) {
+        return false;
+    }
+    
+    validRequests.push(now);
+    rateLimits.set(key, validRequests);
+    return true;
+}
+
+// New: Smart cache management
+function getCache(key, duration = CACHE_DURATION) {
+    const cached = cache.get(key);
+    if (cached && (Date.now() - cached.timestamp) < duration) {
+        return cached.data;
+    }
+    return null;
+}
+
+function setCache(key, data, duration = CACHE_DURATION) {
+    cache.set(key, { data, timestamp: Date.now() });
+    // Auto-cleanup after duration
+    setTimeout(() => cache.delete(key), duration);
+}
+
+// New: Enhanced error handling
+function handleError(error, context, additionalInfo = {}) {
+    const errorInfo = {
+        message: error.message,
+        stack: error.stack,
+        context,
+        timestamp: new Date().toISOString(),
+        ...additionalInfo
+    };
+    
+    if (logger) {
+        logger.logError(error, context, additionalInfo);
+    } else {
+        console.error(`[${context}] Error:`, errorInfo);
+    }
+    
+    return errorInfo;
+}
+
+// Enhanced logging with colors and levels
+async function logAction(guild, message, level = 'info') {
     try {
         const LOG_CHANNEL_ID = config.channels.log;
         if (!LOG_CHANNEL_ID) return;
+        
         const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
         if (!logChannel || !logChannel.isTextBased()) return;
-        const embed = new EmbedBuilder().setColor('Blurple').setDescription(message).setTimestamp();
+        
+        const colors = {
+            info: COLOR_PRESETS.INFO,
+            success: COLOR_PRESETS.SUCCESS,
+            warning: COLOR_PRESETS.WARNING,
+            error: COLOR_PRESETS.ERROR
+        };
+        
+        const embed = new EmbedBuilder()
+            .setColor(colors[level] || COLOR_PRESETS.INFO)
+            .setDescription(message)
+            .setTimestamp()
+            .setFooter({ text: `Level: ${level.toUpperCase()}` });
+            
         await logChannel.send({ embeds: [embed] });
     } catch (e) {
         console.error('Error logging action:', e);
@@ -142,50 +227,93 @@ async function getMojangData(username) {
         throw new Error('Invalid username provided');
     }
 
-    const cacheKey = `mojang-${username.toLowerCase()}`;
-    const cached = cache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-        return cached.data;
+    // Rate limiting check
+    if (!checkRateLimit(`mojang-${username}`, 3, 60000)) {
+        throw new Error('Rate limit exceeded for Mojang API');
     }
 
-    try {
-        const response = await axios.get(`https://api.mojang.com/users/profiles/minecraft/${username}`, { 
-            timeout: 10000,
-            validateStatus: status => status === 200 || status === 404
-        });
-        
-        if (response.data) {
-            const data = response.data;
-            cache.set(cacheKey, { data, timestamp: Date.now() });
-            return data;
+    // Check cache first
+    const cacheKey = `mojang-${username.toLowerCase()}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    let lastError;
+    
+    // Retry logic
+    for (let attempt = 1; attempt <= API_CONFIG.MOJANG.RETRY_ATTEMPTS; attempt++) {
+        try {
+            const response = await axios.get(`${API_CONFIG.MOJANG.BASE_URL}/users/profiles/minecraft/${username}`, { 
+                timeout: API_CONFIG.MOJANG.TIMEOUT,
+                validateStatus: status => status === 200 || status === 404
+            });
+            
+            if (response.data) {
+                setCache(cacheKey, response.data);
+                return response.data;
+            }
+            
+            return null;
+        } catch (error) {
+            lastError = error;
+            
+            if (error.response?.status === 404) {
+                return null; // User not found, don't retry
+            }
+            
+            if (attempt < API_CONFIG.MOJANG.RETRY_ATTEMPTS) {
+                // Exponential backoff
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
         }
-        return null;
-    } catch (error) {
-        if (error.response?.status === 404) return null;
-        if (logger) {
-            logger.logError(error, 'MojangAPI', { username, message: error.message });
-        }
-        throw new Error(`Failed to fetch Mojang data: ${error.message}`);
     }
+    
+    handleError(lastError, 'MojangAPI', { username, attempts: API_CONFIG.MOJANG.RETRY_ATTEMPTS });
+    throw new Error(`Failed to fetch Mojang data after ${API_CONFIG.MOJANG.RETRY_ATTEMPTS} attempts: ${lastError.message}`);
 }
 
 async function getNameHistory(uuid) {
+    // Rate limiting check
+    if (!checkRateLimit(`namehistory-${uuid}`, 2, 60000)) {
+        throw new Error('Rate limit exceeded for Name History API');
+    }
+
+    // Check cache first
+    const cacheKey = `namehistory-${uuid}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
     try {
-        const response = await axios.get(`https://api.mojang.com/user/profiles/${uuid}/names`);
-        return response.data.reverse();
+        const response = await axios.get(`${API_CONFIG.MOJANG.BASE_URL}/user/profiles/${uuid}/names`, {
+            timeout: API_CONFIG.MOJANG.TIMEOUT
+        });
+        
+        const history = response.data.reverse();
+        setCache(cacheKey, history);
+        return history;
     } catch (error) {
-        console.error('Error fetching name history:', error);
+        handleError(error, 'NameHistoryAPI', { uuid });
         return null;
     }
 }
 
 async function getMinecraftProfile(uuid) {
+    // Rate limiting check
+    if (!checkRateLimit(`profile-${uuid}`, 2, 60000)) {
+        throw new Error('Rate limit exceeded for Profile API');
+    }
+
+    // Check cache first
     const cacheKey = `profile-${uuid}`;
-    const cached = cache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) return cached.data;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
 
     try {
-        const sessionResponse = await axios.get(`https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`, { timeout: 10000 });
+        const sessionResponse = await axios.get(
+            `https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`, 
+            { timeout: API_CONFIG.MOJANG.TIMEOUT }
+        );
+        
         const texturesBase64 = sessionResponse.data.properties.find(prop => prop.name === 'textures').value;
         const texturesData = JSON.parse(Buffer.from(texturesBase64, 'base64').toString());
         
@@ -198,7 +326,7 @@ async function getMinecraftProfile(uuid) {
             capes.push(getCapeTypeName(capeUrl));
         }
 
-        // OptiFine Cape
+        // OptiFine Cape (with error handling)
         try {
             const username = sessionResponse.data.name;
             const optifineCapeUrl = `http://s.optifine.net/capes/${username}.png`;
@@ -206,7 +334,7 @@ async function getMinecraftProfile(uuid) {
             if (optifineResponse.status === 200) {
                 capes.push('🎭 کیپ OptiFine');
             }
-        } catch (e) { /* Ignore */ }
+        } catch (e) { /* Ignore OptiFine errors */ }
 
         // Skin Model
         if (texturesData.textures.SKIN?.metadata?.model === 'slim') {
@@ -218,30 +346,63 @@ async function getMinecraftProfile(uuid) {
         const result = {
             capes,
             cosmetics,
-            totalPages: Math.ceil((capes.length + cosmetics.length) / 5)
+            totalPages: Math.ceil((capes.length + cosmetics.length) / 5),
+            username: sessionResponse.data.name,
+            uuid: uuid
         };
 
-        cache.set(cacheKey, { data: result, timestamp: Date.now() });
+        setCache(cacheKey, result);
         return result;
     } catch (error) {
-        console.error('Error fetching profile:', error);
+        handleError(error, 'ProfileAPI', { uuid });
         return { capes: [], cosmetics: [], totalPages: 0 };
     }
 }
 
 async function getHypixelData(uuid, apiKey) {
-    const cacheKey = `hypixel-${uuid}`;
-    const cached = cache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) return cached.data;
-    try {
-        const response = await axios.get(`https://api.hypixel.net/player?uuid=${uuid}&key=${apiKey}`, { timeout: 10000 });
-        if (response.data && response.data.player) {
-            cache.set(cacheKey, { data: response.data, timestamp: Date.now() });
-        }
-        return response.data;
-    } catch (error) {
-        throw error;
+    if (!apiKey) {
+        throw new Error('Hypixel API key is required');
     }
+
+    // Rate limiting check
+    if (!checkRateLimit(`hypixel-${uuid}`, 2, 60000)) {
+        throw new Error('Rate limit exceeded for Hypixel API');
+    }
+
+    // Check cache first
+    const cacheKey = `hypixel-${uuid}`;
+    const cached = getCache(cacheKey);
+    if (cached) return cached;
+
+    let lastError;
+    
+    // Retry logic for Hypixel
+    for (let attempt = 1; attempt <= API_CONFIG.HYPIXEL.RETRY_ATTEMPTS; attempt++) {
+        try {
+            const response = await axios.get(
+                `${API_CONFIG.HYPIXEL.BASE_URL}/player?uuid=${uuid}&key=${apiKey}`, 
+                { timeout: API_CONFIG.HYPIXEL.TIMEOUT }
+            );
+            
+            if (response.data && response.data.player) {
+                setCache(cacheKey, response.data);
+                return response.data;
+            }
+            
+            return response.data;
+        } catch (error) {
+            lastError = error;
+            
+            if (attempt < API_CONFIG.HYPIXEL.RETRY_ATTEMPTS) {
+                // Exponential backoff
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    
+    handleError(lastError, 'HypixelAPI', { uuid, attempts: API_CONFIG.HYPIXEL.RETRY_ATTEMPTS });
+    throw new Error(`Failed to fetch Hypixel data after ${API_CONFIG.HYPIXEL.RETRY_ATTEMPTS} attempts: ${lastError.message}`);
 }
 
 // --- Helper Formatting Functions ---
@@ -842,23 +1003,29 @@ async function registerCommands(clientId, guildId, token) {
 }
 
 module.exports = {
-    // Utility functions
+    // Core Utility Functions
     ms,
     logAction,
+    
+    // Enhanced System Functions (NEW v2.3.0)
+    checkRateLimit,
+    getCache,
+    setCache,
+    handleError,
     
     // Embed Generators
     createCosmeticEmbed,
     sendProfileImageEmbed,
     createProfileImage,
 
-    // API & Data
+    // Enhanced API Functions
     getNameHistory,
     getMojangData,
     getMinecraftProfile,
     getHypixelData,
     getGameStats,
     
-    // Bad words
+    // Bad Words Management
     addBadWord,
     removeBadWord,
     listBadWords,
@@ -888,5 +1055,10 @@ module.exports = {
     getCapeTypeName,
     getHypixelRanks,
     formatRank,
-    getNetworkLevel
+    getNetworkLevel,
+    
+    // Configuration Constants (NEW v2.3.0)
+    COLOR_PRESETS,
+    API_CONFIG,
+    CACHE_DURATION
 };
