@@ -1420,7 +1420,7 @@ async function handleModal(interaction, client, env) {
                 .setStyle(ButtonStyle.Success);
 
             const editButton = new ButtonBuilder()
-                .setCustomId('advertise_cancel')
+                .setCustomId('advertise_edit')
                 .setLabel('✏️ Edit')
                 .setStyle(ButtonStyle.Secondary);
 
