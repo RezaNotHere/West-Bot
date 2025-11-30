@@ -360,7 +360,7 @@ User has been automatically banned after 3 warnings.
 
 #### **Import Example**
 ```bash
-/importbadwords text: "fuck,shit,bitch,کیر,کس,کون"
+/importbadwords text: "bad,words,here, inappropriate,language"
 ```
 
 ### 🛡️ Safety Features
