@@ -1416,17 +1416,17 @@ async function handleModal(interaction, client, env) {
             
             const confirmButton = new ButtonBuilder()
                 .setCustomId(confirmId)
-                .setLabel('✅ Send Advertisement')
+                .setLabel('Send Advertisement')
                 .setStyle(ButtonStyle.Success);
 
             const editButton = new ButtonBuilder()
                 .setCustomId('advertise_edit')
-                .setLabel('✏️ Edit')
+                .setLabel('Edit')
                 .setStyle(ButtonStyle.Secondary);
 
             const cancelButton = new ButtonBuilder()
                 .setCustomId('advertise_cancel')
-                .setLabel('❌ Cancel')
+                .setLabel('Cancel')
                 .setStyle(ButtonStyle.Danger);
 
             const actionRow = new ActionRowBuilder().addComponents(confirmButton, editButton, cancelButton);
