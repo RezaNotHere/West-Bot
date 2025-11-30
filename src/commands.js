@@ -976,7 +976,7 @@ async function handleSlashCommand(interaction) {
     // --- /security ---
     if (interaction.commandName === 'security') {
         if (!securityCommands) {
-            return await InteractionUtils.sendError(interaction, 'Security system not initialized.', true);
+            return await InteractionUtils.sendError(interaction, 'Security system is not available in this environment. Security modules are not installed.', true);
         }
         return await securityCommands.handleSecurityCommand(interaction);
     }
