@@ -875,6 +875,13 @@ async function registerCommands(clientId, guildId, token) {
             .toJSON(),
 
         new SlashCommandBuilder()
+            .setName('importbadwords')
+            .setDescription('Import multiple banned words from text')
+            .addStringOption(opt => opt.setName('text').setDescription('Text containing banned words (separated by spaces, commas, or new lines)').setRequired(true))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .toJSON(),
+
+        new SlashCommandBuilder()
             .setName('clearwarnings')
             .setDescription('Clear warnings for a user')
             .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))

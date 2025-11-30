@@ -218,6 +218,83 @@ async function handleSlashCommand(interaction) {
         return;
     }
 
+    // --- /importbadwords ---
+    if (interaction.commandName === 'importbadwords') {
+        if (!interaction.member.permissions.has('Administrator')) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to use this command.');
+        }
+        
+        const text = interaction.options.getString('text');
+        if (!text) {
+            return await InteractionUtils.sendError(interaction, 'Please provide text to import banned words from.');
+        }
+        
+        try {
+            // Split text by common separators and clean up
+            const words = text.split(/[\s,\n\r\t]+/)
+                .map(word => word.toLowerCase().trim())
+                .filter(word => word.length > 0);
+            
+            if (words.length === 0) {
+                return await InteractionUtils.sendError(interaction, 'No valid words found in the provided text.');
+            }
+            
+            let addedCount = 0;
+            let skippedCount = 0;
+            const skippedWords = [];
+            
+            for (const word of words) {
+                const success = await utils.addBadWord(word);
+                if (success) {
+                    addedCount++;
+                } else {
+                    skippedCount++;
+                    skippedWords.push(word);
+                }
+            }
+            
+            const embed = new EmbedBuilder()
+                .setColor(addedCount > 0 ? 'Green' : 'Orange')
+                .setTitle('📥 Banned Words Import Complete')
+                .addFields(
+                    { name: '✅ Successfully Added', value: `${addedCount} words`, inline: true },
+                    { name: '⏭️ Already Exists', value: `${skippedCount} words`, inline: true },
+                    { name: '📊 Total Processed', value: `${words.length} words`, inline: true }
+                )
+                .setTimestamp();
+            
+            if (skippedWords.length > 0 && skippedWords.length <= 10) {
+                embed.addFields({
+                    name: '⏭️ Skipped Words',
+                    value: skippedWords.join(', '),
+                    inline: false
+                });
+            } else if (skippedWords.length > 10) {
+                embed.addFields({
+                    name: '⏭️ Skipped Words (First 10)',
+                    value: skippedWords.slice(0, 10).join(', ') + `... and ${skippedWords.length - 10} more`,
+                    inline: false
+                });
+            }
+            
+            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            
+            // Log the import action
+            if (logger) {
+                await logger.logInfo('Banned Words Imported', {
+                    Moderator: `${interaction.user.tag} (${interaction.user.id})`,
+                    AddedWords: addedCount,
+                    SkippedWords: skippedCount,
+                    TotalProcessed: words.length
+                });
+            }
+            
+        } catch (error) {
+            await InteractionUtils.sendError(interaction, 'Error importing banned words.', true);
+        }
+        return;
+    }
+
     // --- /clearwarnings ---
     if (interaction.commandName === 'clearwarnings') {
         if (!interaction.member.permissions.has('ModerateMembers')) {
