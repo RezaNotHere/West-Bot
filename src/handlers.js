@@ -1322,10 +1322,41 @@ async function handleModal(interaction, client, env) {
         } catch (error) {
             console.error('Error in sendmessage modal:', error);
             await interaction.editReply({
-                content: `❌ Error sending message: ${error.message}`
+                content: `✅ Message sent successfully to ${target.tag}.`
+            });
+            await logAction(guild, `📩 ${interaction.user.tag} پیامی به کاربر ${target.tag} ارسال کرد.`);
+            
+            if (logger) {
+                await logger.logModeration('Message Sent (DM)', interaction.user, target, {
+                    MessageType: useEmbed ? 'Embed' : 'Text',
+                    Color: color
+                });
+            }
+        } catch (dmError) {
+            throw new Error('امکان ارسال پیام خصوصی به این کاربر وجود ندارد. ممکن است DM کاربر بسته باشد.');
+        }
+    } else {
+        // If not a user, try to send to channel
+        const channel = await interaction.client.channels.fetch(targetId);
+        if (!channel) {
+            throw new Error('مقصد پیام یافت نشد. لطفاً مطمئن شوید که آیدی کاربر یا چنل درست است.');
+        }
+        await channel.send(messageContent);
+        await interaction.editReply({
+            content: `✅ Message sent successfully to channel ${channel.name}.`
+        });
+        await logAction(guild, `� ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
+        
+        if (logger) {
+            await logger.logModeration('Message Sent (Channel)', interaction.user, 
+                { tag: 'System', id: '0' }, {
+                Channel: `${channel.name} (${channel.id})`,
+                MessageType: useEmbed ? 'Embed' : 'Text',
+                Color: color
             });
         }
     }
+}
     else if (customId === 'reopen_ticket') {
         console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
@@ -1435,6 +1466,19 @@ async function handleModal(interaction, client, env) {
                 .setDescription('❌ خطا در باز کردن مجدد تیکت. لطفاً دوباره تلاش کنید.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
+    }
+    else {
+        // Handle unknown button
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        console.log(`Unknown button clicked: customId='${interaction.customId}', user='${interaction.user.id}', guild='${interaction.guild.id}'`);
+        const errorEmbed = new EmbedBuilder()
+            .setColor('Red')
+            .setDescription(`❌ دکمه نامشخص: ${customId}`);
+        await interaction.editReply({ embeds: [errorEmbed] });
     }
 }
 
