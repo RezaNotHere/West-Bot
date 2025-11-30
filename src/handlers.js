@@ -1349,7 +1349,7 @@ async function handleModal(interaction, client, env) {
                 .setColor(embedColor)
                 .setTitle(`📢 ${title}`)
                 .setDescription(message)
-                .setFooter({ text: `Advertisement sent by ${interaction.user.tag} to ${targetRole.name}` })
+                .setFooter({ text: `Advertisement from ${guild.name}` })
                 .setTimestamp();
 
             // Add image if provided
