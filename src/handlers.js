@@ -310,6 +310,32 @@ async function handleButton(interaction, client, env) {
             channel.send({ embeds: [claimEmbed] })
         ]);
 
+        // Disable admin buttons when ticket is claimed
+        const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
+        if (originalMessage && originalMessage.components.length > 0) {
+            const disabledAdminButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('record_order_admin')
+                    .setLabel('📝 Record Order')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId('complete_purchase_admin')
+                    .setLabel('✅ Complete Purchase')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId('claim_ticket')
+                    .setLabel('👋 Claim Ticket (Already Claimed)')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+            );
+
+            await originalMessage.edit({
+                components: [originalMessage.components[0], disabledAdminButtons]
+            });
+        }
+
         await interaction.editReply({
             embeds: [
                 new EmbedBuilder()
