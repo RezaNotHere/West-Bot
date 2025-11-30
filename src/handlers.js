@@ -1345,7 +1345,7 @@ async function handleModal(interaction, client, env) {
         await interaction.editReply({
             content: `✅ Message sent successfully to channel ${channel.name}.`
         });
-        await logAction(guild, `� ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
+        await logAction(guild, `📩 ${interaction.user.tag} پیامی در کانال ${channel.name} ارسال کرد.`);
         
         if (logger) {
             await logger.logModeration('Message Sent (Channel)', interaction.user, 
@@ -1356,7 +1356,11 @@ async function handleModal(interaction, client, env) {
             });
         }
     }
-}
+} catch (error) {
+    console.error('Error in sendmessage modal:', error);
+    await interaction.editReply({
+        content: `❌ Error sending message: ${error.message}`
+    });
     else if (customId === 'reopen_ticket') {
         console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
