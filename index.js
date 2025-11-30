@@ -354,8 +354,8 @@ client.on(Events.MessageCreate, async (message) => {
     
     try {
         // Security checks
-        if (security) {
-            const securityCheck = await security.checkMessage(message);
+        if (securityManager) {
+            const securityCheck = await securityManager.checkMessage(message);
             if (!securityCheck.allowed) {
                 // Security system handles the action (delete, mute, etc.)
                 return;
@@ -389,8 +389,8 @@ client.on(Events.MessageCreate, async (message) => {
 client.on(Events.GuildMemberAdd, async (member) => {
     try {
         // Security check
-        if (security) {
-            const securityCheck = await security.checkMemberJoin(member);
+        if (securityManager) {
+            const securityCheck = await securityManager.checkMemberJoin(member);
             if (!securityCheck.allowed) {
                 // Security system handles the action (kick, etc.)
                 return;
