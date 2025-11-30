@@ -145,7 +145,7 @@ client.once(Events.ClientReady, async () => {
         const progress = Math.round(((i + 1) / startupSteps.length) * 100);
         const bar = '█'.repeat(Math.floor(progress / 5)) + '░'.repeat(20 - Math.floor(progress / 5));
         
-        process.stdout.write('\r' + ' '.clean());
+        process.stdout.write('\r' + ' '.repeat(50));
         console.log(`${step.color}┌─ ${step.emoji} ${step.text}`);
         console.log(`│  Progress: [${bar}] ${progress}%`);
         console.log(`└─ Status: ${step.emoji} Loading...\x1b[0m`);
