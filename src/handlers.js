@@ -236,15 +236,15 @@ async function handleButton(interaction, client, env) {
                 const closedTicketButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('reopen_ticket')
-                        .setLabel('🔓 باز کردن تیکت')
+                        .setLabel('🔓 Open Ticket')
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('create_transcript')
-                        .setLabel('📋 ساخت ترنسکریپت')
+                        .setLabel('📋 Create Transcript')
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId('ticket_delete')
-                        .setLabel('🗑️ حذف تیکت')
+                        .setLabel('🗑️ Delete Ticket')
                         .setStyle(ButtonStyle.Danger)
                 );
 
@@ -429,13 +429,13 @@ async function handleButton(interaction, client, env) {
 
         const ratingMenu = new StringSelectMenuBuilder()
             .setCustomId('rating_input')
-            .setPlaceholder('امتیاز خود را انتخاب کنید')
+            .setPlaceholder('Select your rating')
             .addOptions(
-                new StringSelectMenuOptionBuilder().setLabel('⭐ 1 ستاره').setValue('1'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐ 2 ستاره').setValue('2'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐ 3 ستاره').setValue('3'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐ 4 ستاره').setValue('4'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐⭐ 5 ستاره').setValue('5')
+                new StringSelectMenuOptionBuilder().setLabel('⭐ 1 Star').setValue('1'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐ 2 Stars').setValue('2'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐ 3 Stars').setValue('3'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐ 4 Stars').setValue('4'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐⭐ 5 Stars').setValue('5')
             );
 
         const row = new ActionRowBuilder().addComponents(ratingMenu);
@@ -1077,7 +1077,7 @@ async function handleSelectMenu(interaction, client, env) {
 
         if (reason === 'other') {
             const modal = new ModalBuilder().setCustomId('other_reason_modal').setTitle('دلیل دیگر برای باز کردن تیکت');
-            const input = new TextInputBuilder().setCustomId('other_reason_input').setLabel('لطفا دلیل خود را بنویسید').setStyle(TextInputStyle.Paragraph).setRequired(true);
+            const input = new TextInputBuilder().setCustomId('other_reason_input').setLabel('Please write your reason').setStyle(TextInputStyle.Paragraph).setRequired(true);
             modal.addComponents(new ActionRowBuilder().addComponents(input));
             return interaction.showModal(modal);
         }
@@ -1111,7 +1111,7 @@ async function handleSelectMenu(interaction, client, env) {
     if (customId === 'rating_input') {
         const rating = values[0];
         const modal = new ModalBuilder().setCustomId(`review_comment_modal_${rating}`).setTitle('نظر خود را بنویسید');
-        const commentInput = new TextInputBuilder().setCustomId('comment_input').setLabel('نظر خود را بنویسید (اختیاری)').setStyle(TextInputStyle.Paragraph).setRequired(false);
+        const commentInput = new TextInputBuilder().setCustomId('comment_input').setLabel('Write your comment (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false);
         modal.addComponents(new ActionRowBuilder().addComponents(commentInput));
         await interaction.showModal(modal);
     }
