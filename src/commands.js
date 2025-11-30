@@ -1350,6 +1350,115 @@ async function handleSlashCommand(interaction) {
         return;
     }
 
+    // --- /banstats ---
+    if (interaction.commandName === 'banstats') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to view ban statistics.');
+        }
+
+        try {
+            // Get all ban data
+            const supportBans = db.get('support_bans') || [];
+            const banHistory = db.get('ban_history') || {};
+            const appeals = db.get('support_appeals') || {};
+
+            // Calculate statistics
+            const activeBans = supportBans.filter(ban => ban.status === 'active');
+            const expiredBans = supportBans.filter(ban => ban.status === 'expired');
+            const temporaryBans = activeBans.filter(ban => ban.duration !== 'permanent');
+            const permanentBans = activeBans.filter(ban => ban.duration === 'permanent');
+
+            // Appeal statistics
+            const pendingAppeals = Object.values(appeals).filter(appeal => appeal.status === 'pending');
+            const approvedAppeals = Object.values(appeals).filter(appeal => appeal.status === 'approved');
+            const deniedAppeals = Object.values(appeals).filter(appeal => appeal.status === 'denied');
+
+            // User statistics
+            const totalWarnings = Object.values(banHistory).reduce((sum, user) => sum + (user.warnings || 0), 0);
+            const totalTempBans = Object.values(banHistory).reduce((sum, user) => sum + (user.temp_bans || 0), 0);
+            const totalPermBans = Object.values(banHistory).reduce((sum, user) => sum + (user.perm_bans || 0), 0);
+
+            // Create main stats embed
+            const statsEmbed = new EmbedBuilder()
+                .setColor('Blue')
+                .setTitle('📊 Support Ban Statistics')
+                .setDescription('Comprehensive overview of the support ban system')
+                .addFields(
+                    { name: '🔒 Active Bans', value: `${activeBans.length}`, inline: true },
+                    { name: '⏰ Temporary Bans', value: `${temporaryBans.length}`, inline: true },
+                    { name: '🚫 Permanent Bans', value: `${permanentBans.length}`, inline: true },
+                    { name: '✅ Expired Bans', value: `${expiredBans.length}`, inline: true },
+                    { name: '📋 Pending Appeals', value: `${pendingAppeals.length}`, inline: true },
+                    { name: '✅ Approved Appeals', value: `${approvedAppeals.length}`, inline: true },
+                    { name: '❌ Denied Appeals', value: `${deniedAppeals.length}`, inline: true }
+                )
+                .setTimestamp();
+
+            // Add user history statistics
+            const historyEmbed = new EmbedBuilder()
+                .setColor('Purple')
+                .setTitle('👥 User History Statistics')
+                .addFields(
+                    { name: '⚠️ Total Warnings', value: `${totalWarnings}`, inline: true },
+                    { name: '⏰ Total Temp Bans', value: `${totalTempBans}`, inline: true },
+                    { name: '🚫 Total Perm Bans', value: `${totalPermBans}`, inline: true }
+                )
+                .setTimestamp();
+
+            // Add recent activity (last 5 bans)
+            const recentBans = supportBans
+                .filter(ban => ban.status === 'active')
+                .sort((a, b) => b.banned_at - a.banned_at)
+                .slice(0, 5);
+
+            let recentActivity = 'No recent bans';
+            if (recentBans.length > 0) {
+                recentActivity = recentBans.map((ban, index) => 
+                    `**${index + 1}.** ${ban.user_tag} - ${ban.duration} - <t:${Math.floor(ban.banned_at / 1000)}:R>`
+                ).join('\n');
+            }
+
+            const activityEmbed = new EmbedBuilder()
+                .setColor('Orange')
+                .setTitle('🕐 Recent Activity')
+                .setDescription(recentActivity)
+                .setTimestamp();
+
+            // Add top offenders (users with most bans/warnings)
+            const topOffenders = Object.entries(banHistory)
+                .map(([userId, history]) => ({
+                    userId,
+                    totalActions: (history.warnings || 0) + (history.temp_bans || 0) + (history.perm_bans || 0),
+                    ...history
+                }))
+                .sort((a, b) => b.totalActions - a.totalActions)
+                .slice(0, 5);
+
+            let offendersList = 'No repeat offenders';
+            if (topOffenders.length > 0) {
+                offendersList = topOffenders.map((offender, index) => 
+                    `**${index + 1}.** <@${offender.userId}> - ${offender.totalActions} actions (W: ${offender.warnings || 0}, T: ${offender.temp_bans || 0}, P: ${offender.perm_bans || 0})`
+                ).join('\n');
+            }
+
+            const offendersEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setTitle('⚠️ Top Offenders')
+                .setDescription(offendersList)
+                .setTimestamp();
+
+            await interaction.reply({ 
+                embeds: [statsEmbed, historyEmbed, activityEmbed, offendersEmbed],
+                flags: MessageFlags.Ephemeral 
+            });
+
+        } catch (error) {
+            await InteractionUtils.sendError(interaction, `Failed to fetch ban statistics: ${error.message}`);
+        }
+
+        return;
+    }
+
     // --- /sendmessage ---
     if (interaction.commandName === 'sendmessage') {
         const channel = interaction.options.getChannel('channel');

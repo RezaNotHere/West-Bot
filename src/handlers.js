@@ -107,7 +107,7 @@ async function handleButton(interaction, client, env) {
             if (action === 'approve') {
                 // Remove from support bans
                 const supportBans = db.get('support_bans') || [];
-                const updatedBans = supportBans.filter(id => id !== userId);
+                const updatedBans = supportBans.filter(ban => ban.user_id !== userId);
                 db.set('support_bans', updatedBans);
 
                 // Update appeal status
@@ -132,7 +132,8 @@ async function handleButton(interaction, client, env) {
                         .setDescription('Your support ban appeal has been approved!')
                         .addFields(
                             { name: '🎉 Welcome Back', value: 'You can now create support tickets again.', inline: true },
-                            { name: '🔗 Server Invite', value: `[Click here to rejoin the server](${invite.url})`, inline: true }
+                            { name: '🔗 Server Invite', value: `[Click here to rejoin the server](${invite.url})`, inline: true },
+                            { name: '👮 Approved by', value: interaction.user.tag, inline: true }
                         )
                         .setFooter({ text: 'This invite link expires in 1 hour' })
                         .setTimestamp();
@@ -148,7 +149,8 @@ async function handleButton(interaction, client, env) {
                     .setTitle('✅ Appeal Approved')
                     .addFields(
                         { name: '👤 Approved by', value: interaction.user.tag, inline: true },
-                        { name: '⏰ Approved at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                        { name: '⏰ Approved at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                        { name: '🎉 User Unbanned', value: 'User can now create support tickets again', inline: false }
                     );
 
                 await interaction.update({ 
@@ -156,11 +158,21 @@ async function handleButton(interaction, client, env) {
                     components: [] // Remove buttons
                 });
 
+                // Update ban history
+                const banHistory = db.get('ban_history') || {};
+                if (banHistory[userId]) {
+                    banHistory[userId].appeals_approved = (banHistory[userId].appeals_approved || 0) + 1;
+                    banHistory[userId].last_action = Date.now();
+                    banHistory[userId].last_action_by = `${interaction.user.tag} (${interaction.user.id})`;
+                    db.set('ban_history', banHistory);
+                }
+
                 if (logger) {
                     await logger.logInfo('Support Appeal Approved', {
                         User: `${targetUser?.user?.tag || userId} (${userId})`,
                         ApprovedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                        ApprovedAt: Date.now()
+                        ApprovedAt: Date.now(),
+                        OriginalReason: appeal.reason.substring(0, 100)
                     });
                 }
 
@@ -180,6 +192,7 @@ async function handleButton(interaction, client, env) {
                         .setDescription('Your support ban appeal has been denied.')
                         .addFields(
                             { name: '⏰ Next Attempt', value: 'You can submit another appeal in 1 hour.', inline: true },
+                            { name: '👮 Denied by', value: interaction.user.tag, inline: true },
                             { name: '📝 Reason', value: 'Staff has reviewed your appeal and decided to maintain the ban.', inline: false }
                         )
                         .setFooter({ text: 'Contact server administrators for more information' })
@@ -196,7 +209,8 @@ async function handleButton(interaction, client, env) {
                     .setTitle('❌ Appeal Denied')
                     .addFields(
                         { name: '👤 Denied by', value: interaction.user.tag, inline: true },
-                        { name: '⏰ Denied at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                        { name: '⏰ Denied at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                        { name: '🚫 Ban Maintained', value: 'User remains banned from support tickets', inline: false }
                     );
 
                 await interaction.update({ 
@@ -204,11 +218,21 @@ async function handleButton(interaction, client, env) {
                     components: [] // Remove buttons
                 });
 
+                // Update ban history
+                const banHistory = db.get('ban_history') || {};
+                if (banHistory[userId]) {
+                    banHistory[userId].appeals_denied = (banHistory[userId].appeals_denied || 0) + 1;
+                    banHistory[userId].last_action = Date.now();
+                    banHistory[userId].last_action_by = `${interaction.user.tag} (${interaction.user.id})`;
+                    db.set('ban_history', banHistory);
+                }
+
                 if (logger) {
                     await logger.logInfo('Support Appeal Denied', {
                         User: `${targetUser?.user?.tag || userId} (${userId})`,
                         DeniedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                        DeniedAt: Date.now()
+                        DeniedAt: Date.now(),
+                        OriginalReason: appeal.reason.substring(0, 100)
                     });
                 }
             }
@@ -1295,26 +1319,75 @@ async function handleSelectMenu(interaction, client, env) {
         
         // Check if user is banned from support
         const supportBans = db.get('support_bans') || [];
-        if (supportBans.includes(user.id)) {
-            const bannedEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setTitle('🚫 Support Access Denied')
-                .setDescription('You are currently banned from creating support tickets.')
-                .addFields(
-                    { name: '📝 Appeal Process', value: 'If you believe this ban was made in error, you can request an appeal by clicking the button below.', inline: false },
-                    { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
-                )
-                .setFooter({ text: 'Contact server administrators for immediate assistance' })
-                .setTimestamp();
+        const activeBan = supportBans.find(ban => ban.user_id === user.id && ban.status === 'active');
+        
+        if (activeBan) {
+            // Check if ban has expired (for temporary bans)
+            if (activeBan.expires_at && activeBan.expires_at < Date.now()) {
+                // Auto-unban expired temporary ban
+                activeBan.status = 'expired';
+                activeBan.expired_at = Date.now();
+                
+                // Update ban in database
+                const banIndex = supportBans.findIndex(ban => ban.user_id === user.id);
+                if (banIndex !== -1) {
+                    supportBans[banIndex] = activeBan;
+                    db.set('support_bans', supportBans);
+                }
+                
+                // Log auto-unban
+                if (logger) {
+                    await logger.logInfo('Auto-Unban', {
+                        User: `${user.tag} (${user.id})`,
+                        BanDuration: activeBan.duration,
+                        ExpiredAt: Date.now()
+                    });
+                }
+                
+                // Continue with ticket creation (ban expired)
+            } else {
+                // User is still banned
+                const remainingTime = activeBan.expires_at ? 
+                    `<t:${Math.floor(activeBan.expires_at / 1000)}:R>` : 
+                    'Permanent';
+                
+                const bannedEmbed = new EmbedBuilder()
+                    .setColor('Red')
+                    .setTitle('🚫 Support Access Denied')
+                    .setDescription('You are currently banned from creating support tickets.')
+                    .addFields(
+                        { name: '⏱️ Ban Duration', value: activeBan.duration === 'permanent' ? 'Permanent' : remainingTime, inline: true },
+                        { name: '📝 Reason', value: activeBan.reason, inline: true },
+                        { name: '📋 Appeal Process', value: 'If you believe this ban was made in error, you can request an appeal by clicking the button below.', inline: false },
+                        { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
+                    )
+                    .setFooter({ text: `Banned by ${activeBan.banned_by}` })
+                    .setTimestamp();
 
-            const appealButton = new ButtonBuilder()
-                .setCustomId(`appeal_support_ban_${user.id}`)
-                .setLabel('Request Appeal')
-                .setStyle(ButtonStyle.Primary);
+                // Check if user can appeal (not denied recently)
+                const appeals = db.get('support_appeals') || {};
+                const userAppeal = appeals[user.id];
+                
+                let canAppeal = true;
+                if (userAppeal && userAppeal.status === 'denied') {
+                    const timeSinceDenial = Date.now() - userAppeal.denied_at;
+                    const oneHour = 60 * 60 * 1000;
+                    canAppeal = timeSinceDenial >= oneHour;
+                }
 
-            const actionRow = new ActionRowBuilder().addComponents(appealButton);
+                if (canAppeal) {
+                    const appealButton = new ButtonBuilder()
+                        .setCustomId(`appeal_support_ban_${user.id}`)
+                        .setLabel('Request Appeal')
+                        .setStyle(ButtonStyle.Primary);
 
-            return interaction.editReply({ embeds: [bannedEmbed], components: [actionRow] });
+                    const actionRow = new ActionRowBuilder().addComponents(appealButton);
+                    return interaction.editReply({ embeds: [bannedEmbed], components: [actionRow] });
+                } else {
+                    // Remove appeal button if cooldown active
+                    return interaction.editReply({ embeds: [bannedEmbed], components: [] });
+                }
+            }
         }
         
         if (db.tickets.has(user.id)) {
