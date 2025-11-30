@@ -18,6 +18,11 @@ const setConfig = (c) => { configInstance = c; }
 async function handleButton(interaction, client, env) {
     console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
     
+    // Handle advertisement buttons
+    if (interaction.customId.startsWith('advertise_')) {
+        return await handleAdvertisementButtons(interaction, client, env);
+    }
+    
     // Handle name history button
     if (interaction.customId.startsWith('namehistory_')) {
         // Only admin or special role can access
@@ -1374,22 +1379,49 @@ async function handleModal(interaction, client, env) {
                 components = [new ActionRowBuilder().addComponents(button)];
             }
 
-            let successCount = 0;
-            let failCount = 0;
+            // Create preview embed
+            const previewEmbed = new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(`📢 ${title}`)
+                .setDescription(message)
+                .setFooter({ text: `Advertisement from ${guild.name}` })
+                .setTimestamp();
 
-            // Send advertisement to all members with the role
-            for (const member of membersWithRole.values()) {
+            // Add image if provided
+            if (imageUrl && imageUrl.trim()) {
                 try {
-                    await member.send({ 
-                        embeds: [embed],
-                        components: components
-                    });
-                    successCount++;
+                    previewEmbed.setImage(imageUrl.trim());
                 } catch (error) {
-                    failCount++;
-                    console.log(`Failed to send advertisement to ${member.user.tag}:`, error.message);
+                    console.log('Invalid image URL, skipping image:', error.message);
                 }
             }
+
+            // Create confirmation buttons
+            const confirmButton = new ButtonBuilder()
+                .setCustomId(`advertise_confirm_${targetRoleId}_${color}_${encodeURIComponent(title)}_${encodeURIComponent(message)}_${encodeURIComponent(buttonText || '')}_${encodeURIComponent(buttonLink || '')}_${encodeURIComponent(imageUrl || '')}`)
+                .setLabel('✅ Send Advertisement')
+                .setStyle(ButtonStyle.Success);
+
+            const editButton = new ButtonBuilder()
+                .setCustomId('advertise_cancel')
+                .setLabel('✏️ Edit')
+                .setStyle(ButtonStyle.Secondary);
+
+            const cancelButton = new ButtonBuilder()
+                .setCustomId('advertise_cancel')
+                .setLabel('❌ Cancel')
+                .setStyle(ButtonStyle.Danger);
+
+            const actionRow = new ActionRowBuilder().addComponents(confirmButton, editButton, cancelButton);
+
+            // Send preview
+            await interaction.editReply({ 
+                content: `📋 **Advertisement Preview**\n\nThis advertisement will be sent to **${membersWithRole.size}** members with the **${targetRole.name}** role.\n\nPlease review and confirm:`,
+                embeds: [previewEmbed],
+                components: [actionRow, ...components]
+            });
+            
+            return; // Don't send the actual ads yet
 
             const resultEmbed = new EmbedBuilder()
                 .setColor(successCount > 0 ? 'Green' : 'Red')
@@ -1402,7 +1434,7 @@ async function handleModal(interaction, client, env) {
                 )
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [resultEmbed] });
+            await interaction.editReply({ embeds: [resultEmbed] }); // Remove ephemeral flag
 
             if (logger) {
                 await logger.logInfo('Advertisement Sent', {
@@ -1527,11 +1559,160 @@ async function handleModal(interaction, client, env) {
 }
 }
 
+// --- handleAdvertisementButtons ---
+async function handleAdvertisementButtons(interaction, client, env) {
+    const { customId, user, guild } = interaction;
+    
+    if (customId === 'advertise_cancel') {
+        await interaction.update({
+            content: '❌ Advertisement cancelled.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+    
+    if (customId === 'advertise_edit') {
+        await interaction.update({
+            content: '✏️ Please run the /advertise command again to edit your advertisement.',
+            embeds: [],
+            components: []
+        });
+        return;
+    }
+    
+    if (customId.startsWith('advertise_confirm_')) {
+        try {
+            await interaction.deferUpdate();
+            
+            // Parse the customId data
+            const parts = customId.split('_');
+            const targetRoleId = parts[2];
+            const color = parts[3];
+            const title = decodeURIComponent(parts[4]);
+            const message = decodeURIComponent(parts[5]);
+            const buttonText = decodeURIComponent(parts[6] || '');
+            const buttonLink = decodeURIComponent(parts[7] || '');
+            const imageUrl = decodeURIComponent(parts[8] || '');
+            
+            // Get target role and members
+            const targetRole = guild.roles.cache.get(targetRoleId);
+            if (!targetRole) {
+                return await interaction.editReply({ content: '❌ Target role not found.' });
+            }
+            
+            const membersWithRole = guild.members.cache.filter(member => 
+                member.roles.cache.has(targetRoleId) && !member.user.bot
+            );
+            
+            if (membersWithRole.size === 0) {
+                return await interaction.editReply({ content: `❌ No members found with role ${targetRole.name}.` });
+            }
+            
+            // Color presets
+            const colorMap = {
+                Blue: 0x3498db,
+                Green: 0x2ecc71,
+                Red: 0xe74c3c,
+                Yellow: 0xf1c40f,
+                Orange: 0xe67e22,
+                Purple: 0x9b59b6,
+                Grey: 0x95a5a6
+            };
+            const embedColor = colorMap[color] || colorMap['Blue'];
+            
+            // Create advertisement embed
+            const embed = new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(`📢 ${title}`)
+                .setDescription(message)
+                .setFooter({ text: `Advertisement from ${guild.name}` })
+                .setTimestamp();
+            
+            // Add image if provided
+            if (imageUrl && imageUrl.trim()) {
+                try {
+                    embed.setImage(imageUrl.trim());
+                } catch (error) {
+                    console.log('Invalid image URL, skipping image:', error.message);
+                }
+            }
+            
+            // Prepare message components
+            let components = [];
+            
+            // Add button if both text and link are provided
+            if (buttonText && buttonText.trim() && buttonLink && buttonLink.trim()) {
+                const button = new ButtonBuilder()
+                    .setLabel(buttonText.trim())
+                    .setURL(buttonLink.trim())
+                    .setStyle(ButtonStyle.Link);
+                
+                components = [new ActionRowBuilder().addComponents(button)];
+            }
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            // Send advertisement to all members with the role
+            for (const member of membersWithRole.values()) {
+                try {
+                    await member.send({ 
+                        embeds: [embed],
+                        components: components
+                    });
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    console.log(`Failed to send advertisement to ${member.user.tag}:`, error.message);
+                }
+            }
+            
+            const resultEmbed = new EmbedBuilder()
+                .setColor(successCount > 0 ? 'Green' : 'Red')
+                .setTitle('📊 Advertisement Results')
+                .setDescription(`Advertisement sent to **${targetRole.name}** role members!`)
+                .addFields(
+                    { name: '✅ Successfully Sent', value: `${successCount} members`, inline: true },
+                    { name: '❌ Failed', value: `${failCount} members`, inline: true },
+                    { name: '👥 Total Targeted', value: `${membersWithRole.size} members`, inline: true }
+                )
+                .setTimestamp();
+            
+            await interaction.editReply({ 
+                embeds: [resultEmbed],
+                components: []
+            });
+            
+            if (logger) {
+                await logger.logInfo('Advertisement Sent', {
+                    Sender: `${user.tag} (${user.id})`,
+                    TargetRole: targetRole.name,
+                    SuccessCount: successCount,
+                    FailCount: failCount,
+                    TotalTargeted: membersWithRole.size,
+                    Guild: guild.name
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error sending advertisement:', error);
+            await interaction.editReply({ 
+                content: '❌ Error sending advertisement.',
+                embeds: [],
+                components: []
+            });
+        }
+        return;
+    }
+}
+
 module.exports = {
     handleButton,
     handleSelectMenu,
     handleModal,
     handleModalSubmit: handleModal, // Alias for compatibility
+    handleAdvertisementButtons,
     setLogger,
     setSecurity,
     setConfig
