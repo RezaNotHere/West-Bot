@@ -47,6 +47,12 @@ const rateLimits = new Map(); // New: Rate limiting for API calls
 // --- Load Bad Words from Database ---
 function loadBadWords() {
     try {
+        // Check if database is ready
+        if (!db || !db.bannedWords) {
+            console.log('⚠️ Database not ready, skipping bad words loading');
+            return;
+        }
+        
         // Load all banned words from database
         badWords.clear();
         
