@@ -395,6 +395,35 @@ client.on(Events.MessageCreate, async (message) => {
             // Check if user should be banned (3 warnings = ban)
             if (warningCount >= 3) {
                 try {
+                    // Check if bot has ban permissions
+                    if (!message.guild.members.me.permissions.has('BanMembers')) {
+                        console.log('⚠️ Bot missing BanMembers permission for auto-ban');
+                        
+                        // Send notification to support about missing permissions
+                        const permErrorEmbed = new EmbedBuilder()
+                            .setColor('Orange')
+                            .setTitle('⚠️ Missing Permissions for Auto-Ban')
+                            .setDescription(`User reached 3 warnings but bot lacks ban permissions.`)
+                            .addFields(
+                                { name: '👤 User', value: `${message.author.tag} (${message.author.id})`, inline: false },
+                                { name: '⚠️ Warning Count', value: `${warningCount}/3`, inline: true },
+                                { name: '🔧 Required Permission', value: 'BanMembers', inline: true },
+                                { name: '📝 Suggestion', value: 'Please give the bot BanMembers permission or ban manually', inline: false }
+                            )
+                            .setTimestamp()
+                            .setFooter({ text: 'West Bot Auto-Moderation System' });
+                        
+                        const supportChannelId = config.channels.log || config.channels.support;
+                        if (supportChannelId) {
+                            const supportChannel = message.guild.channels.cache.get(supportChannelId);
+                            if (supportChannel) {
+                                await supportChannel.send({ embeds: [permErrorEmbed] });
+                            }
+                        }
+                        
+                        return; // Stop processing
+                    }
+                    
                     // Ban the user
                     await message.guild.members.ban(message.author, { 
                         reason: '3 warnings for inappropriate language (auto-ban)',
