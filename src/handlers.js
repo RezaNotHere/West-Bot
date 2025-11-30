@@ -892,6 +892,78 @@ async function handleButton(interaction, client, env) {
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
+    else if (customId === 'create_transcript') {
+        console.log(`📋 Create transcript button clicked by ${user.tag}`);
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        // Quick reply first, then process transcript in background
+        const processingEmbed = new EmbedBuilder()
+            .setColor('Yellow')
+            .setDescription('⏳ در حال ساخت ترنسکریپت... لطفاً صبر کنید.');
+        await interaction.editReply({ embeds: [processingEmbed] });
+
+        try {
+            // Process transcript in background to avoid blocking
+            setImmediate(async () => {
+                try {
+                    // Fetch all messages in the ticket (limit to 50 for performance)
+                    const messages = await channel.messages.fetch({ limit: 50 });
+                    
+                    // Create transcript content
+                    let transcript = `📋 ترنسکریپت تیکت: ${channel.name}\n`;
+                    transcript += `👤 صاحب تیکت: <@${db.ticketInfo.get(channel.id)?.ownerId}>\n`;
+                    transcript += `⏰ زمان ساخت: <t:${Math.floor((db.ticketInfo.get(channel.id)?.createdAt || Date.now()) / 1000)}:F>\n`;
+                    transcript += `📝 دلیل: ${db.ticketInfo.get(channel.id)?.reason || 'نامشخص'}\n`;
+                    transcript += `${'='.repeat(50)}\n\n`;
+
+                    messages.forEach(msg => {
+                        transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content}\n`;
+                        if (msg.attachments.size > 0) {
+                            transcript += `[فایل(ها): ${msg.attachments.map(a => a.url).join(', ')}]\n`;
+                        }
+                        transcript += '\n';
+                    });
+
+                    // Send transcript as a file or in chunks
+                    if (transcript.length > 2000) {
+                        // Send as chunks
+                        const chunks = transcript.match(/.{1,2000}/g) || [];
+                        for (let i = 0; i < chunks.length; i++) {
+                            await interaction.followUp({
+                                content: `\`\`\`\n📋 ترنسکریپت (بخش ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\`\`\``,
+                                flags: MessageFlags.Ephemeral
+                            });
+                        }
+                    } else {
+                        await interaction.editReply({
+                            content: `\`\`\`\n📋 ترنسکریپت تیکت:\n\n${transcript}\n\`\`\``
+                        });
+                    }
+
+                    await logAction(guild, `📋 Transcript created for ticket ${channel.name} by ${user.tag}.`);
+
+                } catch (error) {
+                    console.error('Error creating transcript:', error);
+                    const errorEmbed = new EmbedBuilder()
+                        .setColor('Red')
+                        .setDescription('❌ خطا در ساخت ترنسکریپت. لطفاً دوباره تلاش کنید.');
+                    await interaction.editReply({ embeds: [errorEmbed] });
+                }
+            });
+
+        } catch (error) {
+            console.error('Error starting transcript creation:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در شروع ساخت ترنسکریپت.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    }
     else {
         // Handle unknown button
         // Check if interaction is already replied/deferred
@@ -1364,79 +1436,6 @@ async function handleModal(interaction, client, env) {
             await interaction.editReply({ embeds: [errorEmbed] });
         }
     }
-    else if (customId === 'create_transcript') {
-        console.log(`📋 Create transcript button clicked by ${user.tag}`);
-        // Check if interaction is already replied/deferred
-        if (interaction.replied || interaction.deferred) {
-            console.log('⚠️ Interaction already replied/deferred');
-            return;
-        }
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        // Quick reply first, then process transcript in background
-        const processingEmbed = new EmbedBuilder()
-            .setColor('Yellow')
-            .setDescription('⏳ در حال ساخت ترنسکریپت... لطفاً صبر کنید.');
-        await interaction.editReply({ embeds: [processingEmbed] });
-
-        try {
-            // Process transcript in background to avoid blocking
-            setImmediate(async () => {
-                try {
-                    // Fetch all messages in the ticket (limit to 50 for performance)
-                    const messages = await channel.messages.fetch({ limit: 50 });
-                    
-                    // Create transcript content
-                    let transcript = `📋 ترنسکریپت تیکت: ${channel.name}\n`;
-                    transcript += `👤 صاحب تیکت: <@${db.ticketInfo.get(channel.id)?.ownerId}>\n`;
-                    transcript += `⏰ زمان ساخت: <t:${Math.floor((db.ticketInfo.get(channel.id)?.createdAt || Date.now()) / 1000)}:F>\n`;
-                    transcript += `📝 دلیل: ${db.ticketInfo.get(channel.id)?.reason || 'نامشخص'}\n`;
-                    transcript += `${'='.repeat(50)}\n\n`;
-
-                    messages.forEach(msg => {
-                        transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content}\n`;
-                        if (msg.attachments.size > 0) {
-                            transcript += `[فایل(ها): ${msg.attachments.map(a => a.url).join(', ')}]\n`;
-                        }
-                        transcript += '\n';
-                    });
-
-                    // Send transcript as a file or in chunks
-                    if (transcript.length > 2000) {
-                        // Send as chunks
-                        const chunks = transcript.match(/.{1,2000}/g) || [];
-                        for (let i = 0; i < chunks.length; i++) {
-                            await interaction.followUp({
-                                content: `\`\`\`\n📋 ترنسکریپت (بخش ${i + 1}/${chunks.length}):\n\n${chunks[i]}\n\`\`\``,
-                                flags: MessageFlags.Ephemeral
-                            });
-                        }
-                    } else {
-                        await interaction.editReply({
-                            content: `\`\`\`\n📋 ترنسکریپت تیکت:\n\n${transcript}\n\`\`\``
-                        });
-                    }
-
-                    await logAction(guild, `📋 Transcript created for ticket ${channel.name} by ${user.tag}.`);
-
-                } catch (error) {
-                    console.error('Error creating transcript:', error);
-                    const errorEmbed = new EmbedBuilder()
-                        .setColor('Red')
-                        .setDescription('❌ خطا در ساخت ترنسکریپت. لطفاً دوباره تلاش کنید.');
-                    await interaction.editReply({ embeds: [errorEmbed] });
-                }
-            });
-
-        } catch (error) {
-            console.error('Error starting transcript creation:', error);
-            const errorEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setDescription('❌ خطا در شروع ساخت ترنسکریپت.');
-            await interaction.editReply({ embeds: [errorEmbed] });
-        }
-    }
-}
 
 
 module.exports = {
