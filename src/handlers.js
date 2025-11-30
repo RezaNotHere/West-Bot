@@ -350,11 +350,11 @@ async function handleButton(interaction, client, env) {
             .setCustomId('rating_input')
             .setPlaceholder('امتیاز خود را انتخاب کنید')
             .addOptions(
-                new StringSelectMenuOptionBuilder().setLabel('⭐ 1 ستاره').setValue('1').setEmoji('⭐'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐ 2 ستاره').setValue('2').setEmoji('⭐'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐ 3 ستاره').setValue('3').setEmoji('⭐'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐ 4 ستاره').setValue('4').setEmoji('⭐'),
-                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐⭐ 5 ستاره').setValue('5').setEmoji('⭐')
+                new StringSelectMenuOptionBuilder().setLabel('⭐ 1 ستاره').setValue('1'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐ 2 ستاره').setValue('2'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐ 3 ستاره').setValue('3'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐ 4 ستاره').setValue('4'),
+                new StringSelectMenuOptionBuilder().setLabel('⭐⭐⭐⭐⭐ 5 ستاره').setValue('5')
             );
 
         const row = new ActionRowBuilder().addComponents(ratingMenu);
@@ -812,8 +812,26 @@ async function handleSelectMenu(interaction, client, env) {
         }
         await createTicketChannel(guild, user, reason);
         const ticketChannelId = db.tickets.get(user.id);
-        const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما ساخته شد: <#${ticketChannelId}>`);
-        await interaction.editReply({ embeds: [successEmbed] });
+        const successEmbed = new EmbedBuilder()
+            .setColor('Green')
+            .setTitle('🎟️ تیکت شما با موفقیت ساخته شد!')
+            .setDescription(`تیکت شما با موفقیت ایجاد شد. برای دسترسی سریع به تیکت، روی دکمه زیر کلیک کنید.`)
+            .addFields(
+                { name: '📍 شماره تیکت', value: `#${ticketChannelId}`, inline: true },
+                { name: '👤 کاربر', value: `${user.tag}`, inline: true },
+                { name: '⏰ زمان ساخت', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+            )
+            .setFooter({ text: 'برای رفتن به تیکت روی دکمه زیر کلیک کنید' })
+            .setTimestamp();
+
+        const jumpButton = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setLabel('🚀 رفتن به تیکت')
+                .setStyle(ButtonStyle.Link)
+                .setURL(`https://discord.com/channels/${guild.id}/${ticketChannelId}`)
+        );
+
+        await interaction.editReply({ embeds: [successEmbed], components: [jumpButton] });
         
         if (logger) {
             await logger.logTicket('Created', user, {
@@ -917,8 +935,30 @@ async function handleModal(interaction, client, env) {
             // Create ticket channel with details
             await createTicketChannel(guild, user, reason, null, details);
             const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
-            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ Your ticket has been created successfully${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
-            await interaction.editReply({ embeds: [successEmbed] });
+            
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('🎟️ تیکت شما با موفقیت ساخته شد!')
+                .setDescription(`تیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی دکمه زیر کلیک کنید.`)
+                .addFields(
+                    { name: '📍 شماره تیکت', value: `#${ticketChannelId}`, inline: true },
+                    { name: '👤 کاربر', value: `${user.tag}`, inline: true },
+                    { name: '📝 دارای جزئیات', value: '✅ بله', inline: true }
+                )
+                .setFooter({ text: 'برای رفتن به تیکت روی دکمه زیر کلیک کنید' })
+                .setTimestamp();
+
+            if (ticketChannelId) {
+                const jumpButton = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('🚀 رفتن به تیکت')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(`https://discord.com/channels/${guild.id}/${ticketChannelId}`)
+                );
+                await interaction.editReply({ embeds: [successEmbed], components: [jumpButton] });
+            } else {
+                await interaction.editReply({ embeds: [successEmbed] });
+            }
             
             if (logger) {
                 await logger.logTicket('Created (with details)', user, {
@@ -976,8 +1016,30 @@ async function handleModal(interaction, client, env) {
             const reason = fields.getTextInputValue('other_reason_input');
             await createTicketChannel(guild, user, 'other', reason);
             const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
-            const successEmbed = new EmbedBuilder().setColor('Green').setDescription(`✅ تیکت شما با موفقیت ساخته شد${ticketChannelId ? `: <#${ticketChannelId}>` : ''}`);
-            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('🎟️ تیکت شما با موفقیت ساخته شد!')
+                .setDescription(`تیکت شما با موضوع "سایر" ایجاد شد. برای دسترسی سریع به تیکت، روی دکمه زیر کلیک کنید.`)
+                .addFields(
+                    { name: '📍 شماره تیکت', value: `#${ticketChannelId}`, inline: true },
+                    { name: '👤 کاربر', value: `${user.tag}`, inline: true },
+                    { name: '📝 موضوع', value: 'سایر', inline: true }
+                )
+                .setFooter({ text: 'برای رفتن به تیکت روی دکمه زیر کلیک کنید' })
+                .setTimestamp();
+
+            if (ticketChannelId) {
+                const jumpButton = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel('🚀 رفتن به تیکت')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(`https://discord.com/channels/${guild.id}/${ticketChannelId}`)
+                );
+                await interaction.reply({ embeds: [successEmbed], components: [jumpButton], flags: MessageFlags.Ephemeral });
+            } else {
+                await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            }
             
             if (logger) {
                 await logger.logTicket('Created (other)', user, {
