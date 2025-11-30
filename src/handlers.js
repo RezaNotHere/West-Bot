@@ -1349,12 +1349,12 @@ async function handleModal(interaction, client, env) {
         content: `❌ Error sending message: ${error.message}`
     });
 }
+    }
     else if (customId === 'reopen_ticket') {
         console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
             console.log('⚠️ Interaction already replied/deferred');
-            return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
