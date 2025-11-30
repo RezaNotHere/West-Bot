@@ -18,6 +18,211 @@ const setConfig = (c) => { configInstance = c; }
 async function handleButton(interaction, client, env) {
     console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
     
+    // Handle appeal support ban button
+    if (interaction.customId.startsWith('appeal_support_ban_')) {
+        const userId = interaction.customId.split('_')[3];
+        
+        // Check if this user is trying to appeal their own ban
+        if (interaction.user.id !== userId) {
+            return await interaction.reply({ 
+                content: '❌ You can only appeal your own support ban.', 
+                flags: MessageFlags.Ephemeral 
+            });
+        }
+
+        // Check cooldown (1 hour after denial)
+        const appeals = db.get('support_appeals') || {};
+        const userAppeal = appeals[userId];
+        
+        if (userAppeal && userAppeal.status === 'denied') {
+            const timeSinceDenial = Date.now() - userAppeal.denied_at;
+            const oneHour = 60 * 60 * 1000;
+            
+            if (timeSinceDenial < oneHour) {
+                const remainingTime = Math.ceil((oneHour - timeSinceDenial) / (60 * 1000));
+                return await interaction.reply({ 
+                    content: `❌ You must wait ${remainingTime} more minutes before submitting another appeal.`, 
+                    flags: MessageFlags.Ephemeral 
+                });
+            }
+        }
+
+        // Create appeal modal
+        const modal = new ModalBuilder()
+            .setCustomId(`support_appeal_modal_${userId}`)
+            .setTitle('Support Ban Appeal')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('appeal_reason')
+                        .setLabel('Why do you think the ban was made in error?')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Please explain why you believe this ban was a mistake...')
+                        .setRequired(true)
+                        .setMaxLength(1000)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('additional_info')
+                        .setLabel('Additional information (optional)')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Any additional context or information you\'d like to provide...')
+                        .setRequired(false)
+                        .setMaxLength(500)
+                )
+            );
+
+        await interaction.showModal(modal);
+        return;
+    }
+
+    // Handle approve/deny appeal buttons
+    if (interaction.customId.startsWith('approve_appeal_') || interaction.customId.startsWith('deny_appeal_')) {
+        // Check if user has permission to handle appeals
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await interaction.reply({ 
+                content: '❌ You do not have permission to handle appeals.', 
+                flags: MessageFlags.Ephemeral 
+            });
+        }
+
+        const userId = interaction.customId.split('_')[2];
+        const action = interaction.customId.split('_')[0]; // 'approve' or 'deny'
+
+        try {
+            // Get appeal data
+            const appeals = db.get('support_appeals') || {};
+            const appeal = appeals[userId];
+            
+            if (!appeal) {
+                return await interaction.reply({ 
+                    content: '❌ Appeal not found.', 
+                    flags: MessageFlags.Ephemeral 
+                });
+            }
+
+            // Get the user who submitted the appeal
+            const targetUser = await interaction.guild.members.fetch(userId).catch(() => null);
+            
+            if (action === 'approve') {
+                // Remove from support bans
+                const supportBans = db.get('support_bans') || [];
+                const updatedBans = supportBans.filter(id => id !== userId);
+                db.set('support_bans', updatedBans);
+
+                // Update appeal status
+                appeal.status = 'approved';
+                appeal.approved_at = Date.now();
+                appeal.approved_by = interaction.user.id;
+                appeals[userId] = appeal;
+                db.set('support_appeals', appeals);
+
+                // Create invite link
+                const invite = await interaction.guild.invites.create(config.channels.welcome || interaction.guild.systemChannelId, {
+                    maxUses: 1,
+                    maxAge: 3600, // 1 hour
+                    reason: `Support ban appeal approved for ${targetUser?.user?.tag || userId}`
+                });
+
+                // Notify user
+                if (targetUser) {
+                    const approveEmbed = new EmbedBuilder()
+                        .setColor('Green')
+                        .setTitle('✅ Support Ban Appeal Approved')
+                        .setDescription('Your support ban appeal has been approved!')
+                        .addFields(
+                            { name: '🎉 Welcome Back', value: 'You can now create support tickets again.', inline: true },
+                            { name: '🔗 Server Invite', value: `[Click here to rejoin the server](${invite.url})`, inline: true }
+                        )
+                        .setFooter({ text: 'This invite link expires in 1 hour' })
+                        .setTimestamp();
+
+                    await targetUser.send({ embeds: [approveEmbed] }).catch(() => {
+                        console.log(`Could not DM user ${userId} about appeal approval`);
+                    });
+                }
+
+                // Update original message
+                const approvedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor('Green')
+                    .setTitle('✅ Appeal Approved')
+                    .addFields(
+                        { name: '👤 Approved by', value: interaction.user.tag, inline: true },
+                        { name: '⏰ Approved at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                    );
+
+                await interaction.update({ 
+                    embeds: [approvedEmbed], 
+                    components: [] // Remove buttons
+                });
+
+                if (logger) {
+                    await logger.logInfo('Support Appeal Approved', {
+                        User: `${targetUser?.user?.tag || userId} (${userId})`,
+                        ApprovedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                        ApprovedAt: Date.now()
+                    });
+                }
+
+            } else if (action === 'deny') {
+                // Update appeal status
+                appeal.status = 'denied';
+                appeal.denied_at = Date.now();
+                appeal.denied_by = interaction.user.id;
+                appeals[userId] = appeal;
+                db.set('support_appeals', appeals);
+
+                // Notify user
+                if (targetUser) {
+                    const denyEmbed = new EmbedBuilder()
+                        .setColor('Red')
+                        .setTitle('❌ Support Ban Appeal Denied')
+                        .setDescription('Your support ban appeal has been denied.')
+                        .addFields(
+                            { name: '⏰ Next Attempt', value: 'You can submit another appeal in 1 hour.', inline: true },
+                            { name: '📝 Reason', value: 'Staff has reviewed your appeal and decided to maintain the ban.', inline: false }
+                        )
+                        .setFooter({ text: 'Contact server administrators for more information' })
+                        .setTimestamp();
+
+                    await targetUser.send({ embeds: [denyEmbed] }).catch(() => {
+                        console.log(`Could not DM user ${userId} about appeal denial`);
+                    });
+                }
+
+                // Update original message
+                const deniedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor('Red')
+                    .setTitle('❌ Appeal Denied')
+                    .addFields(
+                        { name: '👤 Denied by', value: interaction.user.tag, inline: true },
+                        { name: '⏰ Denied at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+                    );
+
+                await interaction.update({ 
+                    embeds: [deniedEmbed], 
+                    components: [] // Remove buttons
+                });
+
+                if (logger) {
+                    await logger.logInfo('Support Appeal Denied', {
+                        User: `${targetUser?.user?.tag || userId} (${userId})`,
+                        DeniedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                        DeniedAt: Date.now()
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error('Error handling appeal decision:', error);
+            await interaction.reply({ 
+                content: '❌ Error processing appeal decision.', 
+                flags: MessageFlags.Ephemeral 
+            });
+        }
+        return;
+    }
+
     // Handle advertisement buttons
     if (interaction.customId.startsWith('adv_') || interaction.customId.startsWith('advertise_')) {
         return await handleAdvertisementButtons(interaction, client, env);
@@ -1087,6 +1292,31 @@ async function handleSelectMenu(interaction, client, env) {
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        
+        // Check if user is banned from support
+        const supportBans = db.get('support_bans') || [];
+        if (supportBans.includes(user.id)) {
+            const bannedEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setTitle('🚫 Support Access Denied')
+                .setDescription('You are currently banned from creating support tickets.')
+                .addFields(
+                    { name: '📝 Appeal Process', value: 'If you believe this ban was made in error, you can request an appeal by clicking the button below.', inline: false },
+                    { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
+                )
+                .setFooter({ text: 'Contact server administrators for immediate assistance' })
+                .setTimestamp();
+
+            const appealButton = new ButtonBuilder()
+                .setCustomId(`appeal_support_ban_${user.id}`)
+                .setLabel('Request Appeal')
+                .setStyle(ButtonStyle.Primary);
+
+            const actionRow = new ActionRowBuilder().addComponents(appealButton);
+
+            return interaction.editReply({ embeds: [bannedEmbed], components: [actionRow] });
+        }
+        
         if (db.tickets.has(user.id)) {
             const errorEmbed = new EmbedBuilder().setColor('Red').setDescription(`❌ شما از قبل یک تیکت باز دارید: <#${db.tickets.get(user.id)}>`);
             return interaction.editReply({ embeds: [errorEmbed] });
@@ -1123,6 +1353,122 @@ async function handleModal(interaction, client, env) {
     const { customId, fields, user, guild } = interaction;
     const REVIEW_CHANNEL_ID = config.channels.review;
     const BUYER_ROLE_ID = config.roles.buyer;
+
+    // --- support_appeal_modal_ ---
+    if (customId.startsWith('support_appeal_modal_')) {
+        const userId = customId.split('_')[3];
+        
+        // Check if this user is submitting their own appeal
+        if (user.id !== userId) {
+            return await interaction.editReply({ 
+                content: '❌ You can only submit your own appeal.', 
+                flags: MessageFlags.Ephemeral 
+            });
+        }
+
+        try {
+            const appealReason = fields.getTextInputValue('appeal_reason');
+            const additionalInfo = fields.getTextInputValue('additional_info');
+
+            // Get support ban channel from config
+            const supportBanChannelId = config.channels.supportBan;
+            if (!supportBanChannelId) {
+                return await interaction.editReply({ 
+                    content: '❌ Support ban channel not configured.', 
+                    flags: MessageFlags.Ephemeral 
+                });
+            }
+
+            const supportBanChannel = guild.channels.cache.get(supportBanChannelId);
+            if (!supportBanChannel || !supportBanChannel.isTextBased()) {
+                return await interaction.editReply({ 
+                    content: '❌ Support ban channel not found or is not a text channel.', 
+                    flags: MessageFlags.Ephemeral 
+                });
+            }
+
+            // Store appeal in database
+            const appeals = db.get('support_appeals') || {};
+            appeals[userId] = {
+                user_id: userId,
+                user_tag: user.tag,
+                reason: appealReason,
+                additional_info: additionalInfo,
+                submitted_at: Date.now(),
+                status: 'pending'
+            };
+            db.set('support_appeals', appeals);
+
+            // Create appeal embed for staff review
+            const appealEmbed = new EmbedBuilder()
+                .setColor('Yellow')
+                .setTitle('📝 Support Ban Appeal Request')
+                .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+                .addFields(
+                    { name: '👤 User', value: `${user.tag} (${user.id})`, inline: true },
+                    { name: '📅 Submitted', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                    { name: '📋 Appeal Reason', value: appealReason, inline: false }
+                )
+                .setTimestamp();
+
+            if (additionalInfo) {
+                appealEmbed.addFields({
+                    name: 'ℹ️ Additional Information', 
+                    value: additionalInfo, 
+                    inline: false 
+                });
+            }
+
+            // Add approval/rejection buttons
+            const approveButton = new ButtonBuilder()
+                .setCustomId(`approve_appeal_${userId}`)
+                .setLabel('✅ Approve Appeal')
+                .setStyle(ButtonStyle.Success);
+
+            const denyButton = new ButtonBuilder()
+                .setCustomId(`deny_appeal_${userId}`)
+                .setLabel('❌ Deny Appeal')
+                .setStyle(ButtonStyle.Danger);
+
+            const actionRow = new ActionRowBuilder().addComponents(approveButton, denyButton);
+
+            // Send to support ban channel
+            await supportBanChannel.send({ 
+                embeds: [appealEmbed], 
+                components: [actionRow] 
+            });
+
+            // Confirm to user
+            const confirmEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('✅ Appeal Submitted')
+                .setDescription('Your support ban appeal has been submitted for review.')
+                .addFields(
+                    { name: '📝 Status', value: 'Pending review by staff', inline: true },
+                    { name: '⏱️ Response Time', value: 'Staff will review your appeal shortly', inline: true }
+                )
+                .setFooter({ text: 'You will be notified of the decision' })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [confirmEmbed] });
+
+            if (logger) {
+                await logger.logInfo('Support Appeal Submitted', {
+                    User: `${user.tag} (${user.id})`,
+                    AppealReason: appealReason.substring(0, 100),
+                    SubmittedAt: Date.now()
+                });
+            }
+
+        } catch (error) {
+            console.error('Error submitting appeal:', error);
+            await interaction.editReply({ 
+                content: '❌ Error submitting appeal. Please try again later.', 
+                flags: MessageFlags.Ephemeral 
+            });
+        }
+        return;
+    }
 
     if (customId === 'add_card_modal') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {

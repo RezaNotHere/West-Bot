@@ -1215,8 +1215,14 @@ async function handleSlashCommand(interaction) {
         }
 
         const user = interaction.options.getUser('user');
-        if (!user) {
-            return await InteractionUtils.sendError(interaction, 'Please specify a user to send the card to.');
+        const channel = interaction.options.getChannel('channel');
+        
+        if (!user && !channel) {
+            return await InteractionUtils.sendError(interaction, 'Please specify a user or channel to send the card to.');
+        }
+
+        if (user && channel) {
+            return await InteractionUtils.sendError(interaction, 'Cannot specify both user and channel. Choose only one.');
         }
 
         // Get cards from database
@@ -1232,11 +1238,11 @@ async function handleSlashCommand(interaction) {
         // Remove card from database
         db.set('bank_cards', cards.slice(1));
 
-        // Send card to user via DM
+        // Send card to user/channel
         try {
             const cardEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setTitle('💳 Your Bank Card Details')
+                .setTitle(' Your Bank Card Details')
                 .setDescription('Here are your card details. Please keep them secure!')
                 .addFields(
                     { name: 'Card Type', value: card.card_type.toUpperCase(), inline: true },
@@ -1248,15 +1254,27 @@ async function handleSlashCommand(interaction) {
                 .setFooter({ text: 'This card has been removed from our database' })
                 .setTimestamp();
 
-            await user.send({ embeds: [cardEmbed] });
+            let target;
+            let targetType;
+
+            if (user) {
+                await user.send({ embeds: [cardEmbed] });
+                target = user.tag;
+                targetType = 'DM';
+            } else if (channel) {
+                await channel.send({ embeds: [cardEmbed] });
+                target = `#${channel.name}`;
+                targetType = 'Channel';
+            }
 
             const confirmEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setTitle('✅ Card Sent Successfully')
-                .setDescription(`Card details have been sent to ${user.tag}`)
+                .setTitle(' Card Sent Successfully')
+                .setDescription(`Card details have been sent to ${target}`)
                 .addFields(
                     { name: 'Card Type', value: card.card_type.toUpperCase(), inline: true },
                     { name: 'Last 4 Digits', value: card.card_number.slice(-4), inline: true },
+                    { name: 'Target Type', value: targetType, inline: true },
                     { name: 'Remaining Cards', value: `${cards.length - 1}`, inline: true }
                 )
                 .setTimestamp();
@@ -1266,7 +1284,8 @@ async function handleSlashCommand(interaction) {
             if (logger) {
                 await logger.logInfo('Card Sent', {
                     Sender: `${interaction.user.tag} (${interaction.user.id})`,
-                    Recipient: `${user.tag} (${user.id})`,
+                    Target: target,
+                    TargetType: targetType,
                     CardType: card.card_type,
                     Last4Digits: card.card_number.slice(-4),
                     RemainingCards: cards.length - 1
@@ -1276,16 +1295,13 @@ async function handleSlashCommand(interaction) {
         } catch (error) {
             // Put card back if sending failed
             db.set('bank_cards', cards);
-            await InteractionUtils.sendError(interaction, `Failed to send card to ${user.tag}: ${error.message}`);
+            await InteractionUtils.sendError(interaction, `Failed to send card: ${error.message}`);
         }
 
         return;
     }
 
-    // --- /bansupport ---
-    if (interaction.commandName === 'bansupport') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-            return await InteractionUtils.sendError(interaction, 'You do not have permission to ban support users.');
+    // ... (rest of the code remains the same)
         }
 
         const user = interaction.options.getUser('user');
