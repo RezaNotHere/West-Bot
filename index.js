@@ -275,6 +275,10 @@ client.once(Events.ClientReady, async () => {
     const utils = require('./src/utils');
     utils.setClient(client);
     utils.checkGiveaways();
+    
+    // 📚 Load bad words from database
+    console.log('\x1b[96m📚 Loading banned words from database...');
+    utils.loadBadWords();
 
     // 🚀 Auto-update slash commands on startup
     console.log('\x1b[96m🔄 Updating slash commands...');

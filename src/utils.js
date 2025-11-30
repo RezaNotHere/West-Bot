@@ -44,6 +44,25 @@ const cache = new Map();
 const badWords = new Set();
 const rateLimits = new Map(); // New: Rate limiting for API calls
 
+// --- Load Bad Words from Database ---
+function loadBadWords() {
+    try {
+        // Load all banned words from database
+        const bannedWords = db.bannedWords.fetchEverything();
+        badWords.clear();
+        
+        for (const [word, value] of bannedWords) {
+            if (value) {
+                badWords.add(word);
+            }
+        }
+        
+        console.log(`✅ Loaded ${badWords.size} banned words from database`);
+    } catch (error) {
+        console.error('❌ Error loading bad words:', error.message);
+    }
+}
+
 // Client & Logger References
 let client = null;
 let logger = null;
@@ -1053,6 +1072,7 @@ module.exports = {
     removeBadWord,
     listBadWords,
     isBadWord,
+    loadBadWords,
 
     // Warning System
     addWarning,
