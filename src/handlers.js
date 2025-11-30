@@ -991,9 +991,10 @@ async function handleModal(interaction, client, env) {
                     CustomId: customId,
                     User: `${user.tag} (${user.id})`
                 });
-            } else {
-
-    if (customId.startsWith('sendmessage_modal_')) {
+            }
+        }
+    }
+    else if (customId.startsWith('sendmessage_modal_')) {
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
             return;
