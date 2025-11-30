@@ -43,16 +43,12 @@ const logger = new LoggerUtils({
 
 // Initialize optimized security manager only if module exists
 let securityManager = null;
-console.log('🔍 Debug: OptimizedSecurityManager:', typeof OptimizedSecurityManager);
 if (OptimizedSecurityManager) {
     try {
         securityManager = new OptimizedSecurityManager({
             adminIds: config.security?.adminIds || []
         });
         console.log('✅ OptimizedSecurityManager initialized successfully');
-        console.log('🔍 Debug: securityManager methods:', Object.getOwnPropertyNames(securityManager.__proto__));
-        console.log('🔍 Debug: checkInteractionSecurity exists:', typeof securityManager.checkInteractionSecurity);
-        console.log('🔍 Debug: securityManager object:', securityManager);
     } catch (error) {
         console.error('❌ Failed to initialize OptimizedSecurityManager:', error);
         securityManager = null;
