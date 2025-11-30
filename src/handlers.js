@@ -1279,9 +1279,10 @@ async function handleButton(interaction, client, env) {
 
 // --- handleSelectMenu ---
 async function handleSelectMenu(interaction, client, env) {
-    const { customId, values, user, guild } = interaction;
-    const REVIEW_CHANNEL_ID = config.channels.review;
-    const BUYER_ROLE_ID = config.roles.buyer;
+    try {
+        const { customId, values, user, guild } = interaction;
+        const REVIEW_CHANNEL_ID = config.channels.review;
+        const BUYER_ROLE_ID = config.roles.buyer;
 
     if (customId === 'ticket_select') {
         const reason = values[0];
@@ -2283,6 +2284,113 @@ async function handleAdvertisementButtons(interaction, client, env) {
             console.error('❌ Button handling error:', buttonError);
             if (logger) {
                 logger.logError(buttonError, 'Button Handler', {
+                    User: `${interaction.user?.tag} (${interaction.user?.id})`,
+                    CustomId: interaction.customId || 'N/A',
+                    Channel: interaction.channel?.name || 'DM'
+                });
+            }
+        }
+    }
+}
+
+// --- handleSelectMenu ---
+async function handleSelectMenu(interaction, client, env) {
+    try {
+        const { customId, values, user, guild } = interaction;
+        const REVIEW_CHANNEL_ID = config.channels.review;
+        const BUYER_ROLE_ID = config.roles.buyer;
+
+    if (customId === 'ticket_select') {
+        const reason = values[0];
+        const ticketConfig = config.ticketSystem;
+        const categoryConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
+
+        // Check if category requires additional details
+        if (categoryConfig && categoryConfig.requiresDetails) {
+            const modal = new ModalBuilder()
+                .setCustomId(`ticket_details_modal_${reason}`)
+                .setTitle('Additional Details Required');
+            const detailsInput = new TextInputBuilder()
+                .setCustomId('ticket_details_input')
+                .setLabel('Please provide additional details')
+                .setPlaceholder('Enter any additional information...')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(detailsInput));
+            return interaction.showModal(modal);
+        }
+
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            await createTicketChannel(guild, user, reason);
+            const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
+
+            await interaction.editReply({ embeds: [successEmbed] });
+            
+            if (logger) {
+                await logger.logTicket('Created', user, {
+                    TicketChannel: ticketChannelId ? `<#${ticketChannelId}>` : 'N/A',
+                    Reason: reason,
+                    Category: reason
+                });
+            }
+        } catch (err) {
+            // Only edit reply if deferred
+            if (interaction.deferred && !interaction.replied) {
+                try {
+                    await interaction.editReply({ content: '❌ Error creating ticket.' });
+                } catch (editErr) {
+                    console.error('Failed to edit reply after ticket creation error:', editErr);
+                }
+            }
+            console.error('Error creating ticket:', err);
+            if (logger) {
+                await logger.logError(err, 'Ticket Creation', {
+                    User: `${user.tag} (${user.id})`,
+                    Reason: reason,
+                    Guild: guild.name
+                });
+            }
+        }
+        return;
+    }
+
+    if (customId === 'rating_input') {
+        const rating = values[0];
+        const modal = new ModalBuilder().setCustomId(`review_comment_modal_${rating}`).setTitle('نظر خود را بنویسید');
+        const commentInput = new TextInputBuilder().setCustomId('comment_input').setLabel('Write your comment (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false);
+        modal.addComponents(new ActionRowBuilder().addComponents(commentInput));
+        return interaction.showModal(modal);
+    }
+
+    // Handle other select menus
+    console.log(`Unknown select menu: customId='${customId}', user='${user.id}', guild='${guild.id}'`);
+    const errorEmbed = new EmbedBuilder()
+        .setColor('Red')
+        .setDescription(`❌ منوی نامشخص: ${customId}`);
+    await interaction.editReply({ embeds: [errorEmbed] });
+    } catch (selectMenuError) {
+        // Handle Discord API errors gracefully
+        if (selectMenuError.code === 10062) { // Unknown interaction
+            console.warn('⚠️ Select menu interaction expired:', selectMenuError.message);
+        } else if (selectMenuError.code === 10008) { // Unknown member
+            console.warn('⚠️ Member not found in select menu handler:', selectMenuError.message);
+        } else if (selectMenuError.code === 10013) { // Unknown user
+            console.warn('⚠️ User not found in select menu handler:', selectMenuError.message);
+        } else {
+            // Log other errors normally
+            console.error('❌ Select menu handling error:', selectMenuError);
+            if (logger) {
+                logger.logError(selectMenuError, 'Select Menu Handler', {
                     User: `${interaction.user?.tag} (${interaction.user?.id})`,
                     CustomId: interaction.customId || 'N/A',
                     Channel: interaction.channel?.name || 'DM'
