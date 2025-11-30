@@ -188,16 +188,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (securityManager) {
             const securityCheck = await securityManager.checkInteractionSecurity(interaction);
             if (!securityCheck.allowed) {
-                if (interaction.replied || interaction.deferred) {
-                    await interaction.followUp({ 
-                        content: securityCheck.message || 'Access denied',
-                        flags: MessageFlags.Ephemeral
-                    });
-                } else {
-                    await interaction.reply({ 
-                        content: securityCheck.message || 'Access denied',
-                        flags: MessageFlags.Ephemeral
-                    });
+                try {
+                    if (interaction.replied || interaction.deferred) {
+                        await interaction.followUp({ 
+                            content: securityCheck.message || 'Access denied',
+                            flags: MessageFlags.Ephemeral
+                        });
+                    } else {
+                        await interaction.reply({ 
+                            content: securityCheck.message || 'Access denied',
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
+                } catch (replyError) {
+                    // Ignore interaction errors (expired, already responded, etc.)
+                    console.warn('Security check response failed:', replyError.message);
                 }
                 return;
             }
