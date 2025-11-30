@@ -1,5 +1,23 @@
 const { EmbedBuilder, MessageFlags } = require('discord.js');
 
+// Safe interaction reply helper
+async function safeReply(interaction, options) {
+    try {
+        if (interaction.replied || interaction.deferred) {
+            return await interaction.followUp(options);
+        } else {
+            return await interaction.reply(options);
+        }
+    } catch (error) {
+        if (error.code === 10062) {
+            console.warn('⚠️ Interaction expired or already handled:', error.message);
+        } else {
+            console.error('❌ Interaction reply failed:', error);
+        }
+        return null;
+    }
+}
+
 class InteractionUtils {
     /**
      * Send an error response
@@ -16,15 +34,7 @@ class InteractionUtils {
 
         const options = { embeds: [errorEmbed], flags: MessageFlags.Ephemeral };
 
-        try {
-            if (edit && interaction.deferred) {
-                await interaction.editReply(options);
-            } else {
-                await interaction.reply(options);
-            }
-        } catch (error) {
-            console.error('Failed to send error response:', error);
-        }
+        return await safeReply(interaction, options);
     }
 
     /**
@@ -41,15 +51,7 @@ class InteractionUtils {
         
         const options = { embeds: [successEmbed], flags: ephemeral ? MessageFlags.Ephemeral : undefined };
         
-        try {
-            if (edit && interaction.deferred) {
-                await interaction.editReply(options);
-            } else {
-                await interaction.reply(options);
-            }
-        } catch (error) {
-            console.error('Failed to send success response:', error);
-        }
+        return await safeReply(interaction, options);
     }
 
     /**
@@ -61,7 +63,11 @@ class InteractionUtils {
         try {
             await interaction.deferReply({ flags: ephemeral ? MessageFlags.Ephemeral : undefined });
         } catch (error) {
-            console.error('Failed to defer reply:', error);
+            if (error.code === 10062) {
+                console.warn('⚠️ Interaction expired while deferring:', error.message);
+            } else {
+                console.error('Failed to defer reply:', error);
+            }
         }
     }
 }
