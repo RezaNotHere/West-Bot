@@ -1348,7 +1348,6 @@ async function handleModal(interaction, client, env) {
     await interaction.editReply({
         content: `❌ Error sending message: ${error.message}`
     });
-}
     else if (customId === 'reopen_ticket') {
         console.log(`🔓 Reopen ticket button clicked by ${user.tag}`);
         // Check if interaction is already replied/deferred
