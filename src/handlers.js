@@ -1503,6 +1503,7 @@ module.exports = {
     handleButton,
     handleSelectMenu,
     handleModal,
+    handleModalSubmit: handleModal, // Alias for compatibility
     setLogger,
     setSecurity,
     setConfig

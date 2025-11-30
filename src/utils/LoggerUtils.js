@@ -166,7 +166,7 @@ class LoggerUtils {
      * Log errors
      */
     async logError(error, context = '', fields = {}, urgency = 'critical') {
-        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        const errorMessage = (error?.message || error?.toString() || 'Unknown error').substring(0, 500);
         const errorName = error?.name || 'Error';
         
         const embed = this.buildBaseEmbed('error', `❌ Error${context ? ' - ' + context : ''}`, '', urgency);
@@ -175,7 +175,7 @@ class LoggerUtils {
         this.addFieldsToEmbed(embed, fields);
         
         if (error?.stack) {
-            const stackTrace = error.stack.substring(0, 2000);
+            const stackTrace = error.stack.substring(0, 500); // Further reduced
             embed.addFields({ 
                 name: 'Stack Trace', 
                 value: `\`\`\`\n${stackTrace}\n\`\`\``,
