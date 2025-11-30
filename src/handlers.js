@@ -1396,9 +1396,26 @@ async function handleModal(interaction, client, env) {
                 }
             }
 
-            // Create confirmation buttons
+            // Create confirmation buttons with shorter customId
+            const adData = {
+                targetRoleId,
+                color,
+                title,
+                message,
+                buttonText,
+                buttonLink,
+                imageUrl
+            };
+            
+            // Store data temporarily with a unique ID
+            const confirmId = `advertise_confirm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Store data in a temporary map (you could use a database for persistence)
+            if (!global.tempAdData) global.tempAdData = new Map();
+            global.tempAdData.set(confirmId, adData);
+            
             const confirmButton = new ButtonBuilder()
-                .setCustomId(`advertise_confirm_${targetRoleId}_${color}_${encodeURIComponent(title)}_${encodeURIComponent(message)}_${encodeURIComponent(buttonText || '')}_${encodeURIComponent(buttonLink || '')}_${encodeURIComponent(imageUrl || '')}`)
+                .setCustomId(confirmId)
                 .setLabel('✅ Send Advertisement')
                 .setStyle(ButtonStyle.Success);
 
@@ -1585,15 +1602,16 @@ async function handleAdvertisementButtons(interaction, client, env) {
         try {
             await interaction.deferUpdate();
             
-            // Parse the customId data
-            const parts = customId.split('_');
-            const targetRoleId = parts[2];
-            const color = parts[3];
-            const title = decodeURIComponent(parts[4]);
-            const message = decodeURIComponent(parts[5]);
-            const buttonText = decodeURIComponent(parts[6] || '');
-            const buttonLink = decodeURIComponent(parts[7] || '');
-            const imageUrl = decodeURIComponent(parts[8] || '');
+            // Get data from temporary storage
+            const adData = global.tempAdData?.get(customId);
+            if (!adData) {
+                return await interaction.editReply({ content: '❌ Advertisement data expired. Please try again.' });
+            }
+            
+            const { targetRoleId, color, title, message, buttonText, buttonLink, imageUrl } = adData;
+            
+            // Clean up temporary data
+            global.tempAdData.delete(customId);
             
             // Get target role and members
             const targetRole = guild.roles.cache.get(targetRoleId);
