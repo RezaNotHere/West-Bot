@@ -206,6 +206,25 @@ async function handleButton(interaction, client, env) {
                 })
             ]);
 
+            // Update original message with new buttons for closed ticket
+            const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
+            if (originalMessage && originalMessage.components.length > 0) {
+                const closedTicketButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('reopen_ticket')
+                        .setLabel('🔓 باز کردن تیکت')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('delete_ticket')
+                        .setLabel('🗑️ حذف تیکت')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                await originalMessage.edit({
+                    components: [closedTicketButtons]
+                });
+            }
+
             // Quick reply to user
             await interaction.editReply({
                 embeds: [
@@ -326,7 +345,7 @@ async function handleButton(interaction, client, env) {
                     .setDisabled(true),
                 new ButtonBuilder()
                     .setCustomId('claim_ticket')
-                    .setLabel('👋 Claim Ticket (Already Claimed)')
+                    .setLabel('Already Claimed')
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(true)
             );
