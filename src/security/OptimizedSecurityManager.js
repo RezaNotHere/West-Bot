@@ -48,6 +48,18 @@ class OptimizedSecurityManager {
         return { allowed: true };
     }
     
+    async checkInteractionSecurity(interaction) {
+        // Basic checks only
+        this.stats.totalRequests++;
+        
+        if (this.blacklist.users.has(interaction.user.id)) {
+            this.stats.blockedRequests++;
+            return { allowed: false, message: 'Access denied - User blacklisted' };
+        }
+        
+        return { allowed: true };
+    }
+    
     addToBlacklist(userId, type = 'user') {
         this.blacklist[type === 'guild' ? 'guilds' : 'users'].add(userId);
         return true;
