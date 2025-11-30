@@ -755,8 +755,39 @@ async function handleButton(interaction, client, env) {
                 const deleteEmbed = new EmbedBuilder()
                     .setColor('Red')
                     .setTitle('🗑️ تیکت حذف شد')
-                    .setDescription(`تیکت توسط ${user.tag} حذف شد.`);
+                    .setDescription(`تیکت ${channel.name} توسط ${user.tag} حذف شد.`);
                 await channel.send({ embeds: [deleteEmbed] });
+
+                // Generate transcript and send to log channel before deletion
+                try {
+                    const transcriptAttachment = await transcript.createTranscriptFile(channel);
+                    
+                    // Find log channel (you can configure this channel ID)
+                    const logChannelId = config.channels?.log; // or use a specific channel ID
+                    if (logChannelId) {
+                        const logChannel = guild.channels.cache.get(logChannelId);
+                        if (logChannel && logChannel.isTextBased()) {
+                            const transcriptLogEmbed = new EmbedBuilder()
+                                .setColor('Orange')
+                                .setTitle('📋 ترنسکریپت تیکت حذف شده')
+                                .setDescription(`تیکت **${channel.name}**  ترنسکریپت شد`)
+                                .addFields(
+                                    { name: '🗑️ حذف شده توسط', value: `${user.tag}`, inline: true },
+                                    { name: '📅 زمان حذف', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+                                    { name: '👤 صاحب تیکت', value: `<@${ticketInfo.ownerId}>`, inline: false }
+                                )
+                                .setTimestamp();
+                            
+                            await logChannel.send({
+                                embeds: [transcriptLogEmbed],
+                                files: [transcriptAttachment]
+                            });
+                        }
+                    }
+                } catch (transcriptError) {
+                    console.error('Error creating transcript before deletion:', transcriptError);
+                    // Continue with deletion even if transcript fails
+                }
 
                 // Update interaction BEFORE deleting channel
                 try {
@@ -867,12 +898,6 @@ async function handleButton(interaction, client, env) {
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        // Quick reply first, then process transcript in background
-        const processingEmbed = new EmbedBuilder()
-            .setColor('Yellow')
-            .setDescription('⏳ در حال ساخت ترنسکریپت...');
-        await interaction.editReply({ embeds: [processingEmbed] });
 
         try {
             // Generate HTML transcript using the transcript system

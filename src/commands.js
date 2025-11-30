@@ -17,11 +17,22 @@ const utils = require('./utils');
 const InteractionUtils = require('./utils/InteractionUtils');
 const config = require('../configManager');
 const { ValidationError, PermissionError } = require('./errors/BotError');
-const InputValidator = require('./security/InputValidator');
+
+// Conditional imports for security modules (may not exist in production)
+let InputValidator = null;
+let SecurityCommands = null;
+
+try {
+    InputValidator = require('./security/InputValidator');
+    SecurityCommands = require('./security/SecurityCommands');
+} catch (error) {
+    console.warn('Security modules not found:', error.message);
+}
 
 let logger = null;
 let security = null;
 let inputValidator = null;
+let securityCommands = null;
 
 const setLogger = (l) => { 
     logger = l; 
@@ -30,9 +41,16 @@ const setLogger = (l) => {
 
 const setSecurity = (s) => { 
     security = s; 
-    // Initialize input validator
-    inputValidator = new InputValidator();
-    if (logger) inputValidator.setLogger(logger);
+    // Initialize input validator only if module exists
+    if (InputValidator) {
+        inputValidator = new InputValidator();
+        if (logger) inputValidator.setLogger(logger);
+    }
+    
+    // Initialize security commands only if module exists
+    if (SecurityCommands) {
+        securityCommands = new SecurityCommands(security, logger);
+    }
 }
 
 async function handleSlashCommand(interaction) {
@@ -41,23 +59,23 @@ async function handleSlashCommand(interaction) {
         await InteractionUtils.deferReply(interaction, false);
         const username = interaction.options.getString("username")?.trim();
         
-        // Enhanced input validation
+        // Enhanced input validation only if validator exists
         if (!username) {
             return await InteractionUtils.sendError(interaction, "Username is required.", false);
         }
         
-        // Validate username format
-        const usernameValidation = inputValidator.validate(username, 'minecraftUsername');
-        if (!usernameValidation.valid) {
-            return await InteractionUtils.sendError(
-                interaction, 
-                `Invalid username format: ${usernameValidation.errors.join(', ')}`, 
-                false
-            );
+        // Validate username format only if validator exists
+        if (inputValidator) {
+            const usernameValidation = inputValidator.validate(username, 'minecraftUsername');
+            if (!usernameValidation.valid) {
+                return await InteractionUtils.sendError(
+                    interaction, 
+                    `Invalid username format: ${usernameValidation.errors.join(', ')}`, 
+                    false
+                );
+            }
+            username = usernameValidation.sanitized;
         }
-        
-        // Use sanitized username
-        const sanitizedUsername = usernameValidation.sanitized;
         
         // Validate config variables
         if (!config.apis || !config.apis.mojang) {
@@ -66,15 +84,17 @@ async function handleSlashCommand(interaction) {
         }
         
         try {
-            const mojangData = await utils.getMojangData(sanitizedUsername);
+            const mojangData = await utils.getMojangData(username);
             if (!mojangData) {
                 throw new Error("Minecraft account not found.");
             }
             
-            // Additional validation for UUID
-            const uuidValidation = inputValidator.validate(mojangData.id, 'discordId');
-            if (!uuidValidation.valid) {
-                throw new Error("Invalid UUID format received from Mojang API.");
+            // Additional validation for UUID only if validator exists
+            if (inputValidator) {
+                const uuidValidation = inputValidator.validate(mojangData.id, 'discordId');
+                if (!uuidValidation.valid) {
+                    throw new Error("Invalid UUID format received from Mojang API.");
+                }
             }
             
             // Generate profile image with validated data
@@ -84,11 +104,9 @@ async function handleSlashCommand(interaction) {
             if (logger) {
                 await logger.logError(error, 'mcinfo Command', {
                     User: `${interaction.user.tag} (${interaction.user.id})`,
-                    Username: sanitizedUsername,
-                    OriginalUsername: username,
+                    Username: username,
                     Guild: interaction.guild?.name || 'DM',
-                    Channel: interaction.channel?.name || 'DM',
-                    ValidationErrors: usernameValidation.errors || []
+                    Channel: interaction.channel?.name || 'DM'
                 });
             }
             
@@ -116,16 +134,20 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'Word cannot be empty.', true);
         }
         
-        const wordValidation = inputValidator.validate(word, 'safeText', { maxLength: 50 });
-        if (!wordValidation.valid) {
-            return await InteractionUtils.sendError(
-                interaction, 
-                `Invalid word format: ${wordValidation.errors.join(', ')}`, 
-                true
-            );
-        }
+        let sanitizedWord = word.trim().toLowerCase();
         
-        const sanitizedWord = wordValidation.sanitized.toLowerCase();
+        // Validate only if validator exists
+        if (inputValidator) {
+            const wordValidation = inputValidator.validate(word, 'safeText', { maxLength: 50 });
+            if (!wordValidation.valid) {
+                return await InteractionUtils.sendError(
+                    interaction, 
+                    `Invalid word format: ${wordValidation.errors.join(', ')}`, 
+                    true
+                );
+            }
+            sanitizedWord = wordValidation.sanitized.toLowerCase();
+        }
         
         try {
             const success = await utils.addBadWord(sanitizedWord);
@@ -153,16 +175,20 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'Word cannot be empty.', true);
         }
         
-        const wordValidation = inputValidator.validate(word, 'safeText', { maxLength: 50 });
-        if (!wordValidation.valid) {
-            return await InteractionUtils.sendError(
-                interaction, 
-                `Invalid word format: ${wordValidation.errors.join(', ')}`, 
-                true
-            );
-        }
+        let sanitizedWord = word.trim().toLowerCase();
         
-        const sanitizedWord = wordValidation.sanitized.toLowerCase();
+        // Validate only if validator exists
+        if (inputValidator) {
+            const wordValidation = inputValidator.validate(word, 'safeText', { maxLength: 50 });
+            if (!wordValidation.valid) {
+                return await InteractionUtils.sendError(
+                    interaction, 
+                    `Invalid word format: ${wordValidation.errors.join(', ')}`, 
+                    true
+                );
+            }
+            sanitizedWord = wordValidation.sanitized.toLowerCase();
+        }
         
         try {
             const success = await utils.removeBadWord(sanitizedWord);
@@ -252,33 +278,39 @@ async function handleSlashCommand(interaction) {
                 );
             }
 
-            // Enhanced input validation
-            const validationResults = {
-                prize: inputValidator.validate(prize, 'safeText', { maxLength: 100 }),
-                duration: inputValidator.validate(durationStr, 'duration'),
-                winners: inputValidator.validate(winners.toString(), 'numbers')
-            };
+            let sanitizedPrize = prize;
+            let sanitizedDuration = durationStr;
+            let sanitizedWinners = winners;
+            
+            // Enhanced input validation only if validator exists
+            if (inputValidator) {
+                const validationResults = {
+                    prize: inputValidator.validate(prize, 'safeText', { maxLength: 100 }),
+                    duration: inputValidator.validate(durationStr, 'duration'),
+                    winners: inputValidator.validate(winners.toString(), 'numbers')
+                };
 
-            // Check validation results
-            const validationErrors = [];
-            Object.entries(validationResults).forEach(([field, result]) => {
-                if (!result.valid) {
-                    validationErrors.push(`${field}: ${result.errors.join(', ')}`);
+                // Check validation results
+                const validationErrors = [];
+                Object.entries(validationResults).forEach(([field, result]) => {
+                    if (!result.valid) {
+                        validationErrors.push(`${field}: ${result.errors.join(', ')}`);
+                    }
+                });
+
+                if (validationErrors.length > 0) {
+                    return await InteractionUtils.sendError(
+                        interaction, 
+                        `Validation errors: ${validationErrors.join('; ')}`, 
+                        true
+                    );
                 }
-            });
 
-            if (validationErrors.length > 0) {
-                return await InteractionUtils.sendError(
-                    interaction, 
-                    `Validation errors: ${validationErrors.join('; ')}`, 
-                    true
-                );
+                // Use sanitized values
+                sanitizedPrize = validationResults.prize.sanitized;
+                sanitizedDuration = validationResults.duration.sanitized;
+                sanitizedWinners = parseInt(validationResults.winners.sanitized);
             }
-
-            // Use sanitized values
-            const sanitizedPrize = validationResults.prize.sanitized;
-            const sanitizedDuration = validationResults.duration.sanitized;
-            const sanitizedWinners = parseInt(validationResults.winners.sanitized);
 
             // Additional business logic validation
             if (sanitizedWinners < 1 || sanitizedWinners > 10) {
@@ -496,7 +528,6 @@ async function handleSlashCommand(interaction) {
             .setColor('#2ecc71')
             .setTitle('📋 Select Notification Roles')
             .setDescription('Select or remove roles to receive different notifications. Click again to remove the role.\n\n**Roles:**\n🎉 Events/Giveaways\n📦 Drops\n🔔 Updates')
-            .setFooter({ text: 'Click the respective button to enable/disable each role.' })
             .setTimestamp();
         const row = new ActionRowBuilder().addComponents(
             ...roles.map(r => new ButtonBuilder().setCustomId(`rolebtn_${r.id}`).setLabel(r.label).setStyle(r.color).setEmoji(r.emoji))
@@ -504,12 +535,11 @@ async function handleSlashCommand(interaction) {
         try {
             await interaction.reply({ embeds: [embed], components: [row] });
         } catch (error) {
-            // Ignore menu send errors
+            console.error('Error sending role menu:', error);
+            await InteractionUtils.sendError(interaction, 'Failed to send role menu. Please check my permissions.');
         }
         return;
     }
-
-    // --- /sendticketmenu ---
     if (interaction.commandName === 'sendticketmenu') {
         if (!interaction.channel || interaction.channel.type !== 0) {
             return await InteractionUtils.sendError(interaction, 'This command can only be used in text channels.');
@@ -518,12 +548,24 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to send the ticket menu.');
         }
 
+        // Get channel from user input
+        const targetChannel = interaction.options.getChannel('channel');
+        
+        if (!targetChannel) {
+            return await InteractionUtils.sendError(interaction, 'Please select a channel to send the ticket menu to.');
+        }
+
+        if (!targetChannel.isTextBased()) {
+            return await InteractionUtils.sendError(interaction, 'Selected channel must be a text channel.');
+        }
+
         const ticketConfig = config.ticketSystem;
         const embed = new EmbedBuilder()
             .setColor(config.colors.primary || '#5865F2')
             .setTitle(ticketConfig.menu.title)
             .setDescription(ticketConfig.menu.description)
-            .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL({ dynamic: true }) })
+            .setThumbnail(config.shop?.logo || null)
+            .setFooter({ text: 'تیم پشتیبانی', iconURL: config.shop?.logo || interaction.guild.iconURL({ dynamic: true }) })
             .setTimestamp();
 
         const menu = new ActionRowBuilder().addComponents(
@@ -532,12 +574,18 @@ async function handleSlashCommand(interaction) {
                 .setPlaceholder(ticketConfig.menu.placeholder)
                 .addOptions(ticketConfig.menu.categories)
         );
-        await interaction.reply({ embeds: [embed], components: [menu] });
+
+        try {
+            await targetChannel.send({ embeds: [embed], components: [menu] });
+            await InteractionUtils.sendSuccess(interaction, `Ticket menu has been successfully sent to ${targetChannel}!`);
+        } catch (error) {
+            console.error('Error sending ticket menu:', error);
+            await InteractionUtils.sendError(interaction, 'Failed to send ticket menu. Please check my permissions.');
+        }
         return;
     }
 
     // --- /warn ---
-    // (این بخش در کد اصلی شکسته بود و اصلاح شد)
     if (interaction.commandName === 'warn') {
         if (!interaction.member.permissions.has('ModerateMembers')) {
              return await InteractionUtils.sendError(interaction, 'You do not have permission to warn users.');
@@ -919,10 +967,18 @@ async function handleSlashCommand(interaction) {
             console.error('Unban command error:', error);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
-                .setDescription('❌ Error unbanning user. Please check the user ID.');
+                .setDescription('❌ Error unbanning user. Please check my permissions.');
             await interaction.editReply({ embeds: [errorEmbed] });
         }
         return;
+    }
+
+    // --- /security ---
+    if (interaction.commandName === 'security') {
+        if (!securityCommands) {
+            return await InteractionUtils.sendError(interaction, 'Security system not initialized.', true);
+        }
+        return await securityCommands.handleSecurityCommand(interaction);
     }
 
     // --- /serverinfo ---
@@ -930,9 +986,7 @@ async function handleSlashCommand(interaction) {
         await interaction.deferReply();
 
         try {
-            const { guild } = interaction;
-            await guild.fetch();
-            
+            const guild = interaction.guild;
             const owner = await guild.fetchOwner();
             const channels = guild.channels.cache;
             const roles = guild.roles.cache;

@@ -10,6 +10,7 @@ const events = require('./src/events');
 const handlers = require('./src/handlers');
 const LoggerUtils = require('./src/utils/LoggerUtils');
 const EnhancedSecurityManager = require('./src/security/EnhancedSecurityManager');
+const OptimizedSecurityManager = require('./src/security/OptimizedSecurityManager');
 const commandLogger = require('./src/commandLogger');
 
 // ✅ Validate configuration before starting
