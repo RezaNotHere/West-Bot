@@ -37,6 +37,13 @@ class InputValidator {
             title: { min: 1, max: 256 },
             description: { min: 1, max: 1000 }
         };
+        
+        this.logger = null;
+    }
+    
+    setLogger(logger) {
+        this.logger = logger;
+        return this;
     }
 
     /**
