@@ -44,7 +44,11 @@ const setSecurity = (s) => {
     // Initialize input validator only if module exists
     if (InputValidator) {
         inputValidator = new InputValidator();
-        if (logger) inputValidator.setLogger(logger);
+        if (logger && inputValidator.setLogger) {
+            inputValidator.setLogger(logger);
+        } else if (!inputValidator.setLogger) {
+            console.warn('⚠️ InputValidator.setLogger() method not available');
+        }
     }
     
     // Initialize security commands only if module exists
