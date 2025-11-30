@@ -11,7 +11,7 @@ const {
     PermissionFlagsBits 
 } = require('discord.js');
 const axios = require('axios');
-const db = require('./database'); // مطمئن شوید فایل database.js وجود دارد
+const { db } = require('./database'); // مطمئن شوید فایل database.js وجود دارد
 const config = require('../configManager');
 
 // --- Global Variables & Cache ---
@@ -58,16 +58,20 @@ async function logAction(guild, message) {
 // --- Bad Words Management ---
 
 async function addBadWord(word) {
-    if (badWords.has(word)) return false;
-    badWords.add(word);
-    await db.badWords.set(word, true);
+    if (!word || typeof word !== 'string') return false;
+    const cleanWord = word.toLowerCase().trim();
+    if (badWords.has(cleanWord)) return false;
+    badWords.add(cleanWord);
+    await db.badWords.set(cleanWord, true);
     return true;
 }
 
 async function removeBadWord(word) {
-    if (!badWords.has(word)) return false;
-    badWords.delete(word);
-    await db.badWords.delete(word);
+    if (!word || typeof word !== 'string') return false;
+    const cleanWord = word.toLowerCase().trim();
+    if (!badWords.has(cleanWord)) return false;
+    badWords.delete(cleanWord);
+    await db.badWords.delete(cleanWord);
     return true;
 }
 
@@ -454,44 +458,46 @@ async function ensureTicketCategory(guild, categoryName) {
     return category;
 }
 
-async function createTicketChannel(guild, user, reason, customReason = null, additionalDetails = '') {
+async function createTicketChannel(guild, user, reason, additionalDetails = '') {
     const ticketConfig = config.ticketSystem;
-    const TICKET_ACCESS_ROLE_ID = config.roles.ticketAccess;
-    const SHOP_ROLE_ID = config.roles.shop;
+    if (!ticketConfig) throw new Error('Ticket system configuration not found');
 
-    const category = await ensureTicketCategory(guild, ticketConfig.categoryName);
-    if (!category) return;
+    const TICKET_CATEGORY_ID = config.roles?.ticketAccess;
+    if (!TICKET_CATEGORY_ID) throw new Error('Ticket access role ID not configured');
 
-    const finalReason = customReason || reason;
-    const channelName = ticketConfig.channelNameTemplate.replace('{username}', user.username.replace(/[^a-z0-9-]/g, ''));
-    const channelTopic = ticketConfig.channelTopicTemplate
-        .replace('{user_tag}', user.tag)
-        .replace('{reason}', finalReason);
+    const category = guild.channels.cache.get(TICKET_CATEGORY_ID) || 
+                   await ensureTicketCategory(guild, ticketConfig.categoryName);
 
+    const ticketNumber = (guild.channels.cache.filter(ch => ch.name.startsWith('ticket-')).size) + 1;
+    const channelName = ticketConfig.channelNameTemplate.replace('{username}', user.username).replace('{number}', ticketNumber);
+    
     const ticketChannel = await guild.channels.create({
-        name: channelName.slice(0, 100),
-        type: 0, // TEXT_CHANNEL
+        name: channelName,
+        type: 0, // GUILD_TEXT
         parent: category.id,
-        topic: channelTopic,
         permissionOverwrites: [
-            { id: guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
-            { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-            { id: TICKET_ACCESS_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageMessages] },
-            { id: SHOP_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageMessages] }
-        ],
+            { id: guild.id, deny: ['ViewChannel'] },
+            { id: user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles', 'EmbedLinks'] },
+            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageMessages'] },
+            { id: TICKET_CATEGORY_ID, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] }
+        ]
     });
 
-    db.tickets.set(user.id, ticketChannel.id);
-    db.ticketInfo.set(ticketChannel.id, { ownerId: user.id, reason: finalReason, status: 'open', claimedBy: null });
-
+    const finalReason = ticketConfig.menu.categories.find(cat => cat.value === reason)?.label || reason;
+    
     const welcomeEmbed = new EmbedBuilder()
-        .setColor(config.colors.info || '#3498DB')
-        .setTitle(ticketConfig.welcomeMessage.title.replace('{username}', user.username))
-        .setDescription(ticketConfig.welcomeMessage.description.replace('{reason}', finalReason))
+        .setColor(ticketConfig.embedColor || '#0099ff')
+        .setTitle(ticketConfig.embedTitle || '🎟️ Support Ticket')
+        .setDescription(`Hello ${user},\n\nThank you for creating a ticket. Our support team will be with you shortly.\n\n**Subject:** ${finalReason}`)
+        .addFields(
+            { name: 'Created By', value: `${user.tag} (${user.id})`, inline: true },
+            { name: 'Ticket ID', value: `#${ticketNumber}`, inline: true },
+            { name: 'Created At', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+        )
+        .setFooter({ text: guild.name, iconURL: guild.iconURL() })
         .setTimestamp();
 
-    // Add additional details if provided
-    if (additionalDetails && additionalDetails.trim()) {
+    if (additionalDetails) {
         welcomeEmbed.addFields({
             name: 'Additional Details',
             value: additionalDetails.length > 1024 ? additionalDetails.substring(0, 1021) + '...' : additionalDetails,
@@ -500,44 +506,27 @@ async function createTicketChannel(guild, user, reason, customReason = null, add
     }
 
     const userButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('complete_purchase').setLabel(ticketConfig.buttons.user.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.user.completePurchase.style]),
-        new ButtonBuilder().setCustomId('close_ticket_user').setLabel(ticketConfig.buttons.user.closeTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.user.closeTicket.style])
+        new ButtonBuilder().setCustomId('complete_purchase').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('close_ticket_user').setLabel('🔒 Close Ticket').setStyle(ButtonStyle.Danger)
     );
 
     const adminButtons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('record_order_admin').setLabel(ticketConfig.buttons.admin.recordOrder.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.recordOrder.style]),
-        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel(ticketConfig.buttons.admin.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.completePurchase.style]),
-        new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons.admin.claimTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.claimTicket.style])
+        new ButtonBuilder().setCustomId('record_order_admin').setLabel('📝 Record Order').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel('✅ Complete Purchase').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
     );
 
-    // Find category config to get detailed description
-    const categoryConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
-    const detailedDesc = categoryConfig?.detailedDescription || '';
-
-    // Add "More Details" button if category has detailed description
-    let moreDetailsButtons = null;
-    if (detailedDesc) {
-        moreDetailsButtons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`more_details_${reason}`).setLabel('📋 More Details').setStyle(ButtonStyle.Primary)
-        );
-    }
-
-    const mentionText = ticketConfig.mentionText
-        .replace('{user_id}', user.id)
-        .replace('{ticket_access_role_id}', TICKET_ACCESS_ROLE_ID);
-
-    const components = [userButtons, adminButtons];
-    if (moreDetailsButtons) {
-        components.push(moreDetailsButtons);
-    }
+    const mentionText = `<@${user.id}> <@&${TICKET_CATEGORY_ID}>`;
 
     await ticketChannel.send({ 
         content: mentionText, 
         embeds: [welcomeEmbed], 
-        components: components
+        components: [userButtons, adminButtons]
     });
 
     await logAction(guild, `🎟️ New ticket created for ${user.tag} with subject "${finalReason}". <#${ticketChannel.id}>`);
+    
+    return ticketChannel;
 }
 
 // --- Shop & Events Logic ---
@@ -860,7 +849,7 @@ module.exports = {
     // Embed Generators
     createCosmeticEmbed,
     sendProfileImageEmbed,
-    createProfileImage, // Mock/Placeholder
+    createProfileImage,
 
     // API & Data
     getNameHistory,
@@ -893,5 +882,11 @@ module.exports = {
 
     // Scheduled Tasks
     checkGiveaways,
-    checkPolls
+    checkPolls,
+    
+    // Helper Functions
+    getCapeTypeName,
+    getHypixelRanks,
+    formatRank,
+    getNetworkLevel
 };
