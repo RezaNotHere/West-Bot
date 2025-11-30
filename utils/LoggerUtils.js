@@ -221,6 +221,26 @@ class LoggerUtils {
     }
 
     /**
+     * Add fields to embed with proper validation
+     * @param {EmbedBuilder} embed - The embed to add fields to
+     * @param {Object} fields - Fields object
+     */
+    addFieldsToEmbed(embed, fields) {
+        if (!fields || typeof fields !== 'object') return;
+        
+        Object.entries(fields).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                const stringValue = String(value).substring(0, 1024); // Limit field value length
+                embed.addFields({
+                    name: key,
+                    value: stringValue || 'N/A',
+                    inline: false
+                });
+            }
+        });
+    }
+
+    /**
      * ساخت امبد پایه با رنگ و زمان
      * @param {string} level - سطح لاگ
      * @param {string} title - عنوان امبد
