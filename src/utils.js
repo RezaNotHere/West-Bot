@@ -741,6 +741,25 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
     if (additionalDetails) {
         welcomeEmbed.addFields({
             name: 'Additional Details',
+            value: additionalDetails.length > 1024 ? additionalDetails.substring(0, 1021) + '...' : additionalDetails,
+            inline: false
+        });
+    }
+
+    const userButtons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('complete_purchase').setLabel(ticketConfig.buttons?.user?.completePurchase?.label || '✅ Complete Purchase').setStyle(getButtonStyle(ticketConfig.buttons?.user?.completePurchase?.style || 'Success')),
+        new ButtonBuilder().setCustomId('close_ticket_user').setLabel(ticketConfig.buttons?.user?.closeTicket?.label || '🔒 Close Ticket').setStyle(getButtonStyle(ticketConfig.buttons?.user?.closeTicket?.style || 'Danger'))
+    );
+
+    const adminButtons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('record_order_admin').setLabel(ticketConfig.buttons?.admin?.recordOrder?.label || '📝 Record Order').setStyle(getButtonStyle(ticketConfig.buttons?.admin?.recordOrder?.style || 'Primary')),
+        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel(ticketConfig.buttons?.admin?.completePurchase?.label || '✅ Complete Order').setStyle(getButtonStyle(ticketConfig.buttons?.admin?.completePurchase?.style || 'Success')),
+        new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons?.admin?.claimTicket?.label || '👋 Claim Ticket').setStyle(getButtonStyle(ticketConfig.buttons?.admin?.claimTicket?.style || 'Secondary'))
+    );
+
+    const mentionText = `<@${user.id}> <@&${TICKET_CATEGORY_ID}>`;
+
+    await ticketChannel.send({ 
         content: mentionText, 
         embeds: [welcomeEmbed], 
         components: [userButtons, adminButtons]
