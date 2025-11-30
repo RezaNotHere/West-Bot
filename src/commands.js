@@ -1301,7 +1301,10 @@ async function handleSlashCommand(interaction) {
         return;
     }
 
-    // ... (rest of the code remains the same)
+    // --- /bansupport ---
+    if (interaction.commandName === 'bansupport') {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to ban support users.');
         }
 
         const user = interaction.options.getUser('user');
@@ -1321,7 +1324,7 @@ async function handleSlashCommand(interaction) {
 
             const embed = new EmbedBuilder()
                 .setColor('Red')
-                .setTitle('🔨 Support Ban')
+                .setTitle(' Support Ban')
                 .setDescription(`${user.tag} has been banned from creating support tickets.`)
                 .addFields(
                     { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
