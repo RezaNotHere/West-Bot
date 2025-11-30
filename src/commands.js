@@ -1027,6 +1027,57 @@ async function handleSlashCommand(interaction) {
         return;
     }
 
+    // --- /advertise ---
+    if (interaction.commandName === 'advertise') {
+        if (!interaction.member.permissions.has('ManageMessages')) {
+            return await InteractionUtils.sendError(interaction, 'You do not have permission to send advertisements.');
+        }
+        
+        const targetRole = interaction.options.getRole('target_role');
+        const color = interaction.options.getString('color') || 'Blue';
+        
+        if (!targetRole) {
+            return await InteractionUtils.sendError(interaction, 'Target role is required.', true);
+        }
+        
+        // Get all members with the target role
+        const membersWithRole = interaction.guild.members.cache.filter(member => 
+            member.roles.cache.has(targetRole.id) && !member.user.bot
+        );
+        
+        if (membersWithRole.size === 0) {
+            return await InteractionUtils.sendError(interaction, `No members found with role ${targetRole.name}.`, true);
+        }
+        
+        // Create modal for advertisement message
+        const modal = new ModalBuilder()
+            .setCustomId(`advertise_modal_${targetRole.id}_${color}`)
+            .setTitle(`Send Advertisement to ${targetRole.name}`)
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_title')
+                        .setLabel('Advertisement Title')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('Enter your advertisement title...')
+                        .setRequired(true)
+                        .setMaxLength(256)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_message')
+                        .setLabel('Advertisement Message')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setPlaceholder('Enter your advertisement message...')
+                        .setRequired(true)
+                        .setMaxLength(2000)
+                )
+            );
+        
+        await interaction.showModal(modal);
+        return;
+    }
+
     // --- /sendmessage ---
     if (interaction.commandName === 'sendmessage') {
         const channel = interaction.options.getChannel('channel');

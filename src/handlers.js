@@ -1290,14 +1290,121 @@ async function handleModal(interaction, client, env) {
             }
             
             if (logger) {
-                await logger.logError(err, 'Other Reason Modal', {
+                await logger.logError(err, 'Review Modal', {
+                    CustomId: customId,
+                    User: `${user.tag} (${user.id})`
+                });
+            } else {
+                console.error('Error handling review modal:', err);
+            }
+        }
+        return;
+    }
+
+    if (customId.startsWith('advertise_modal_')) {
+        try {
+            // Check if interaction is already replied/deferred
+            if (interaction.replied || interaction.deferred) {
+                return;
+            }
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            const parts = customId.split('_');
+            const targetRoleId = parts[2];
+            const color = parts[3] || 'Blue';
+            const title = fields.getTextInputValue('advertise_title');
+            const message = fields.getTextInputValue('advertise_message');
+
+            // Get target role and members
+            const targetRole = guild.roles.cache.get(targetRoleId);
+            if (!targetRole) {
+                return await interaction.editReply({ content: '❌ Target role not found.', flags: MessageFlags.Ephemeral });
+            }
+
+            const membersWithRole = guild.members.cache.filter(member => 
+                member.roles.cache.has(targetRoleId) && !member.user.bot
+            );
+
+            if (membersWithRole.size === 0) {
+                return await interaction.editReply({ content: `❌ No members found with role ${targetRole.name}.`, flags: MessageFlags.Ephemeral });
+            }
+
+            // Color presets
+            const colorMap = {
+                Blue: 0x3498db,
+                Green: 0x2ecc71,
+                Red: 0xe74c3c,
+                Yellow: 0xf1c40f,
+                Orange: 0xe67e22,
+                Purple: 0x9b59b6,
+                Grey: 0x95a5a6
+            };
+            const embedColor = colorMap[color] || colorMap['Blue'];
+
+            // Create advertisement embed
+            const embed = new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(`📢 ${title}`)
+                .setDescription(message)
+                .setFooter({ text: `Advertisement sent by ${interaction.user.tag} to ${targetRole.name}` })
+                .setTimestamp();
+
+            let successCount = 0;
+            let failCount = 0;
+
+            // Send advertisement to all members with the role
+            for (const member of membersWithRole.values()) {
+                try {
+                    await member.send({ embeds: [embed] });
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                    console.log(`Failed to send advertisement to ${member.user.tag}:`, error.message);
+                }
+            }
+
+            const resultEmbed = new EmbedBuilder()
+                .setColor(successCount > 0 ? 'Green' : 'Red')
+                .setTitle('📊 Advertisement Results')
+                .setDescription(`Advertisement sent to **${targetRole.name}** role members!`)
+                .addFields(
+                    { name: '✅ Successfully Sent', value: `${successCount} members`, inline: true },
+                    { name: '❌ Failed', value: `${failCount} members`, inline: true },
+                    { name: '👥 Total Targeted', value: `${membersWithRole.size} members`, inline: true }
+                )
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [resultEmbed] });
+
+            if (logger) {
+                await logger.logInfo('Advertisement Sent', {
+                    Sender: `${interaction.user.tag} (${interaction.user.id})`,
+                    TargetRole: targetRole.name,
+                    SuccessCount: successCount,
+                    FailCount: failCount,
+                    TotalTargeted: membersWithRole.size,
+                    Guild: guild.name
+                });
+            }
+
+        } catch (err) {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
+            } else {
+                await interaction.editReply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
+            }
+            
+            if (logger) {
+                await logger.logError(err, 'Advertisement Modal', {
                     CustomId: customId,
                     User: `${user.tag} (${user.id})`
                 });
             }
         }
+        return;
     }
-else if (customId.startsWith('sendmessage_modal_')) {
+
+    if (customId.startsWith('sendmessage_modal_')) {
     // Check if interaction is already replied/deferred
     if (interaction.replied || interaction.deferred) {
         return;
