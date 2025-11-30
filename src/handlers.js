@@ -831,25 +831,60 @@ async function handleButton(interaction, client, env) {
         });
     }
     else if (customId === 'complete_purchase') {
-                const parentCategory = channel.parent;
-                await channel.delete();
-                
-                // Delete the parent category if it exists and is empty
-                if (parentCategory && parentCategory.type === 4) { // 4 is Category
-                    try {
-                        // Check if category has any remaining channels
-                        const remainingChannels = await parentCategory.children.fetch().catch(() => null);
-                        if (!remainingChannels || remainingChannels.size === 0) {
-                            await parentCategory.delete();
-                        }
-                    } catch (categoryError) {
-                        console.error('Error deleting category:', categoryError);
-                    }
-                }
-            } catch (e) {
-                console.error('Error deleting ticket channel or category:', e);
+        console.log(`✅ Complete purchase button clicked by ${user.tag}`);
+        // Check if interaction is already replied/deferred
+        if (interaction.replied || interaction.deferred) {
+            console.log('⚠️ Interaction already replied/deferred');
+            return;
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            const ticketInfo = db.ticketInfo.get(channel.id);
+            if (!ticketInfo) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor('Red')
+                    .setDescription('❌ اطلاعات تیکت پیدا نشد.');
+                return interaction.editReply({ embeds: [errorEmbed] });
             }
-        }, 5000);
+
+            const completeEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('✅ خرید کامل شد')
+                .setDescription(`خرید تیکت توسط ${user.tag} تکمیل شد.`)
+                .setTimestamp();
+
+            await Promise.all([
+                channel.send({ embeds: [completeEmbed] }),
+                db.ticketInfo.set(channel.id, { ...ticketInfo, status: 'completed', completedBy: user.id, completedAt: Date.now() })
+            ]);
+
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setDescription('✅ خرید با موفقیت تکمیل شد.');
+
+            await interaction.editReply({ embeds: [successEmbed] });
+            
+            // Background logging (non-blocking)
+            setImmediate(async () => {
+                await logAction(guild, `✅ Purchase completed for ticket ${channel.name} by ${user.tag}.`);
+                
+                if (logger) {
+                    await logger.logTicket('Completed', user, {
+                        TicketChannel: `${channel.name} (${channel.id})`,
+                        CompletedBy: `${user.tag} (${user.id})`,
+                        Owner: `<@${ticketInfo.ownerId}>`
+                    });
+                }
+            });
+
+        } catch (error) {
+            console.error('Error completing purchase:', error);
+            const errorEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setDescription('❌ خطا در تکمیل خرید. لطفاً دوباره تلاش کنید.');
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
     }
     else {
         // Handle unknown button
