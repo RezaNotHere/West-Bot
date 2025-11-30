@@ -5,7 +5,8 @@ const {
     GatewayIntentBits, 
     Partials,
     Events,
-    EmbedBuilder 
+    EmbedBuilder,
+    ActivityType 
 } = require('discord.js');
 const config = require('./configManager');
 const { db, dbManager } = require('./src/database');
