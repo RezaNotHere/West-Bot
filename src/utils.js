@@ -1,17 +1,17 @@
 // utils.js
-const {
-    EmbedBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    PermissionsBitField,
-    REST,
-    Routes,
-    SlashCommandBuilder,
-    PermissionFlagsBits
+const { 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    PermissionsBitField, 
+    REST, 
+    Routes, 
+    SlashCommandBuilder, 
+    PermissionFlagsBits 
 } = require('discord.js');
 const axios = require('axios');
-const { db } = require('./database'); // مطمئن شوید فایل database.js وجود دارد
+const db = require('./database'); // مطمئن شوید فایل database.js وجود دارد
 const config = require('../configManager');
 
 // --- Global Variables & Cache ---
@@ -55,31 +55,19 @@ async function logAction(guild, message) {
     }
 }
 
-// Enhanced logging function that uses logger if available
-async function logActionEnhanced(guild, action, fields = {}) {
-    if (logger) {
-        await logger.logInfo(action, {
-            Guild: `${guild.name} (${guild.id})`,
-            ...fields
-        }, 'Action');
-    }
-    // Also use old logAction for backward compatibility
-    await logAction(guild, action);
-}
-
 // --- Bad Words Management ---
 
 async function addBadWord(word) {
     if (badWords.has(word)) return false;
     badWords.add(word);
-    db.badWords.set(word, true);
+    await db.badWords.set(word, true);
     return true;
 }
 
 async function removeBadWord(word) {
     if (!badWords.has(word)) return false;
     badWords.delete(word);
-    db.badWords.delete(word);
+    await db.badWords.delete(word);
     return true;
 }
 
@@ -95,54 +83,24 @@ function isBadWord(text) {
 
 // --- Warning System ---
 
-async function addWarning(userId, reason = null, moderator = null) {
-    let warnings = db.warnings.get(userId);
-    
-    // If warnings is a number (legacy format), convert to array
-    if (typeof warnings === 'number') {
-        const count = warnings;
-        warnings = [];
-        for (let i = 0; i < count; i++) {
-            warnings.push({
-                reason: 'Legacy warning',
-                moderatorId: '0',
-                timestamp: Date.now() - (count - i) * 3600000
-            });
-        }
-    }
-    
-    // Initialize as empty array if not exists
-    if (!warnings || !Array.isArray(warnings)) {
-        warnings = [];
-    }
-    
-    // If called with just userId (automatic warnings), add a simple warning
-    if (!reason && !moderator) {
-        warnings.push({
-            reason: 'Automatic warning (bad word detected)',
-            moderatorId: '0',
-            timestamp: Date.now()
-        });
-    } else {
-        // If called with reason and moderator (manual warnings), store with details
-        warnings.push({
-            reason: reason || 'No reason provided',
-            moderatorId: moderator?.id || '0',
-            timestamp: Date.now()
-        });
-    }
-    
-    db.warnings.set(userId, warnings);
+async function addWarning(userId, reason, moderator) {
+    const warnings = await db.warnings.get(userId) || [];
+    warnings.push({
+        reason,
+        moderatorId: moderator.id,
+        timestamp: Date.now()
+    });
+    await db.warnings.set(userId, warnings);
     return warnings.length;
 }
 
 async function clearWarnings(userId) {
-    db.warnings.delete(userId);
+    await db.warnings.delete(userId);
     return true;
 }
 
 async function getWarnings(userId) {
-    return db.warnings.get(userId) || [];
+    return await db.warnings.get(userId) || [];
 }
 
 async function sendWarningDM(member, warningCount, maxWarnings, reason, moderator) {
@@ -150,7 +108,7 @@ async function sendWarningDM(member, warningCount, maxWarnings, reason, moderato
         const warningEmbed = new EmbedBuilder()
             .setColor(warningCount >= maxWarnings ? 'Red' : 'Orange')
             .setTitle(warningCount >= maxWarnings ? '🔨 شما از سرور بن شدید' : '⚠️ اخطار از مدیریت سرور')
-            .setDescription(warningCount >= maxWarnings
+            .setDescription(warningCount >= maxWarnings 
                 ? `شما به دلیل دریافت ${maxWarnings} اخطار از سرور حذف شدید.`
                 : `شما یک اخطار از مدیریت سرور دریافت کردید.`
             )
@@ -159,10 +117,9 @@ async function sendWarningDM(member, warningCount, maxWarnings, reason, moderato
                 { name: 'دلیل اخطار', value: reason, inline: true },
                 { name: 'اعلام کننده', value: moderator.tag, inline: true }
             )
-            .setFooter({
-                text: warningCount >= maxWarnings
-                    ? 'دسترسی شما به سرور قطع شد'
-                    : 'لطفاً قوانین سرور را رعایت کنید'
+            .setFooter({ text: warningCount >= maxWarnings 
+                ? 'دسترسی شما به سرور قطع شد' 
+                : 'لطفاً قوانین سرور را رعایت کنید'
             })
             .setTimestamp();
 
@@ -188,11 +145,11 @@ async function getMojangData(username) {
     }
 
     try {
-        const response = await axios.get(`https://api.mojang.com/users/profiles/minecraft/${username}`, {
+        const response = await axios.get(`https://api.mojang.com/users/profiles/minecraft/${username}`, { 
             timeout: 10000,
             validateStatus: status => status === 200 || status === 404
         });
-
+        
         if (response.data) {
             const data = response.data;
             cache.set(cacheKey, { data, timestamp: Date.now() });
@@ -227,7 +184,7 @@ async function getMinecraftProfile(uuid) {
         const sessionResponse = await axios.get(`https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`, { timeout: 10000 });
         const texturesBase64 = sessionResponse.data.properties.find(prop => prop.name === 'textures').value;
         const texturesData = JSON.parse(Buffer.from(texturesBase64, 'base64').toString());
-
+        
         const capes = [];
         const cosmetics = [];
 
@@ -356,32 +313,32 @@ function createCosmeticEmbed(username, uuid, cosmeticCapes, cosmetics, page) {
         .setThumbnail(`https://mc-heads.net/head/${uuid}/left`)
         .setTimestamp();
 
-    embed.addFields({
-        name: "🎭 نمای کامل کاراکتر",
+    embed.addFields({ 
+        name: "🎭 نمای کامل کاراکتر", 
         value: `[مشاهده رندر HD](https://mc-heads.net/body/${uuid}/left)`,
-        inline: true
+        inline: true 
     });
 
     if (capesPage.length > 0) {
-        embed.addFields({
-            name: "🧥 کیپ‌های فعال",
+        embed.addFields({ 
+            name: "🧥 کیپ‌های فعال", 
             value: `[مشاهده کیپ‌ها در NameMC](https://namemc.com/profile/${uuid})\n${capesPage.join('\n')}`,
-            inline: true
+            inline: true 
         });
     }
-
+    
     if (cosmeticsPage.length > 0) {
-        embed.addFields({
-            name: "🎨 مدل اسکین",
-            value: cosmeticsPage.join('\n'),
-            inline: true
+        embed.addFields({ 
+            name: "🎨 مدل اسکین", 
+            value: cosmeticsPage.join('\n'), 
+            inline: true 
         });
     }
 
-    embed.addFields({
-        name: "🔍 لینک‌های مفید",
-        value: `[NameMC](https://namemc.com/profile/${uuid}) | [Skin History](https://namemc.com/profile/${uuid}/skin) | [Cape Viewer](https://mc-heads.net/cape/${uuid})`,
-        inline: false
+    embed.addFields({ 
+        name: "🔍 لینک‌های مفید", 
+        value: `[NameMC](https://namemc.com/profile/${uuid}) | [Skin History](https://namemc.com/profile/${uuid}/skin) | [Cape Viewer](https://mc-heads.net/cape/${uuid})`, 
+        inline: false 
     });
 
     return embed;
@@ -402,13 +359,13 @@ async function sendProfileImageEmbed(interaction, uuid, capeUrls, hypixelStats) 
             if (interaction?.options && typeof interaction.options.getString === 'function') {
                 username = interaction.options.getString('username') || username;
             }
-        } catch (e) { }
+        } catch (e) {}
 
         if ((!username || username === 'Unknown') && uuid) {
             try {
                 const mojang = await getMojangData(uuid);
                 if (mojang && mojang.name) username = mojang.name || mojang.username || username;
-            } catch (e) { }
+            } catch (e) {}
         }
 
         let stats = {};
@@ -431,7 +388,7 @@ async function sendProfileImageEmbed(interaction, uuid, capeUrls, hypixelStats) 
 
         const buffer = await createProfileImage({ uuid, username, rank: 'Unknown', stats, capeUrls });
 
-        const capeInfo = capeUrls.length > 0
+        const capeInfo = capeUrls.length > 0 
             ? `🧥 **${capeUrls.length}** کیپ فعال`
             : '❌ بدون کیپ فعال';
 
@@ -451,7 +408,7 @@ async function sendProfileImageEmbed(interaction, uuid, capeUrls, hypixelStats) 
                 `\n${capeUrls.length > 0 ? '**🏆 کیپ‌های فعال:**\n' + capeUrls.map(url => '> • ' + getCapeTypeName(url)).join('\n') : ''}`
             ].filter(Boolean).join('\n'),
             image: { url: 'attachment://profile.png' },
-            footer: {
+            footer: { 
                 text: '⭐ کلیک روی دکمه‌های زیر برای اطلاعات بیشتر',
                 icon_url: 'https://mc-heads.net/head/' + uuid
             },
@@ -486,29 +443,24 @@ async function sendProfileImageEmbed(interaction, uuid, capeUrls, hypixelStats) 
 
 // --- Ticket System ---
 
+async function ensureTicketCategory(guild, categoryName) {
+    let category = guild.channels.cache.find(c => c.name === categoryName && c.type === 4); // 4 = GUILD_CATEGORY
+    if (!category) {
+        category = await guild.channels.create({
+            name: categoryName,
+            type: 4
+        });
+    }
+    return category;
+}
+
 async function createTicketChannel(guild, user, reason, customReason = null, additionalDetails = '') {
     const ticketConfig = config.ticketSystem;
     const TICKET_ACCESS_ROLE_ID = config.roles.ticketAccess;
     const SHOP_ROLE_ID = config.roles.shop;
 
-    // --- NEW: Find category by ticket reason, or create if missing
-    const reasonConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
-    const desiredCategoryName = reasonConfig?.value || reasonConfig?.label || reason || "Tickets";
-    let category = guild.channels.cache.find(
-      ch => ch.type === 4 && ch.name.toLowerCase() === desiredCategoryName.toLowerCase()
-    );
-    if (!category) {
-        category = await guild.channels.create({
-            name: desiredCategoryName,
-            type: 4, // GUILD_CATEGORY
-            permissionOverwrites: [
-                { id: guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
-                { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-                { id: TICKET_ACCESS_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageMessages] },
-                { id: SHOP_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageMessages] }
-            ]
-        });
-    }
+    const category = await ensureTicketCategory(guild, ticketConfig.categoryName);
+    if (!category) return;
 
     const finalReason = customReason || reason;
     const channelName = ticketConfig.channelNameTemplate.replace('{username}', user.username.replace(/[^a-z0-9-]/g, ''));
@@ -549,42 +501,43 @@ async function createTicketChannel(guild, user, reason, customReason = null, add
 
     const userButtons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('complete_purchase').setLabel(ticketConfig.buttons.user.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.user.completePurchase.style]),
-        new ButtonBuilder().setCustomId('close_ticket_user').setLabel(ticketConfig.buttons.user.closeTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.user.closeTicket.style]),
-        new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons.admin.claimTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.claimTicket.style])
+        new ButtonBuilder().setCustomId('close_ticket_user').setLabel(ticketConfig.buttons.user.closeTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.user.closeTicket.style])
     );
 
     const adminButtons = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('record_order_admin').setLabel(ticketConfig.buttons.admin.recordOrder.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.recordOrder.style]),
-        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel(ticketConfig.buttons.admin.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.completePurchase.style])
+        new ButtonBuilder().setCustomId('complete_purchase_admin').setLabel(ticketConfig.buttons.admin.completePurchase.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.completePurchase.style]),
+        new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons.admin.claimTicket.label).setStyle(ButtonStyle[ticketConfig.buttons.admin.claimTicket.style])
     );
 
-    // Management buttons for ticket operations (only for closed tickets)
-    // For open tickets, no management buttons needed
-    const managementButtons = new ActionRowBuilder().addComponents(
-        // Remove close button for open tickets - users can close via userButtons
-    );
+    // Find category config to get detailed description
+    const categoryConfig = ticketConfig.menu.categories.find(cat => cat.value === reason);
+    const detailedDesc = categoryConfig?.detailedDescription || '';
+
+    // Add "More Details" button if category has detailed description
+    let moreDetailsButtons = null;
+    if (detailedDesc) {
+        moreDetailsButtons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`more_details_${reason}`).setLabel('📋 More Details').setStyle(ButtonStyle.Primary)
+        );
+    }
 
     const mentionText = ticketConfig.mentionText
         .replace('{user_id}', user.id)
         .replace('{ticket_access_role_id}', TICKET_ACCESS_ROLE_ID);
-    const components = [userButtons, adminButtons, managementButtons];
 
-    await ticketChannel.send({
-        content: mentionText,
-        embeds: [welcomeEmbed],
+    const components = [userButtons, adminButtons];
+    if (moreDetailsButtons) {
+        components.push(moreDetailsButtons);
+    }
+
+    await ticketChannel.send({ 
+        content: mentionText, 
+        embeds: [welcomeEmbed], 
         components: components
     });
 
     await logAction(guild, `🎟️ New ticket created for ${user.tag} with subject "${finalReason}". <#${ticketChannel.id}>`);
-    
-    if (logger) {
-        await logger.logTicket('Created', user, {
-            TicketChannel: `${ticketChannel.name} (${ticketChannel.id})`,
-            Reason: finalReason,
-            Category: reason,
-            HasDetails: additionalDetails ? 'Yes' : 'No'
-        });
-    }
 }
 
 // --- Shop & Events Logic ---
@@ -612,7 +565,7 @@ async function checkGiveaways() {
 }
 
 async function endGiveaway(messageId) {
-    if (!client) return;
+    if (!client) return; 
     const giveaway = db.giveaways.get(messageId);
     if (!giveaway || giveaway.ended) return;
     const channel = client.channels.cache.get(giveaway.channelId);
@@ -635,7 +588,7 @@ async function endGiveaway(messageId) {
         .setFooter({ text: 'پایان یافته' })
         .setTimestamp();
     await message.edit({ embeds: [endEmbed], components: [] });
-
+    
     if (winners.length > 0) {
         const winnerEmbed = new EmbedBuilder()
             .setColor('#FFD700')
@@ -643,7 +596,7 @@ async function endGiveaway(messageId) {
             .setDescription(`شما در سرور **${channel.guild.name}** برنده گیووای با جایزه **${giveaway.prize}** شدید!\n\nبرای دریافت جایزه خود، لطفاً یک تیکت باز کنید.\n\n⚠️ توجه: اگر تا ۲۴ ساعت آینده تیکت باز نکنید، جایزه شما ممکن است به فرد دیگری داده شود.`)
             .setFooter({ text: 'تیم مدیریت سرور' })
             .setTimestamp();
-
+        
         for (const winnerId of winners) {
             try {
                 const user = await client.users.fetch(winnerId);
@@ -652,7 +605,7 @@ async function endGiveaway(messageId) {
                 console.error('Failed to DM giveaway winner:', winnerId, e);
             }
         }
-
+        
         const publicEmbed = new EmbedBuilder()
             .setColor('#FFD700')
             .setTitle('🎉 برندگان گیووای')
@@ -903,8 +856,7 @@ module.exports = {
     // Utility functions
     ms,
     logAction,
-    logActionEnhanced,
-
+    
     // Embed Generators
     createCosmeticEmbed,
     sendProfileImageEmbed,
@@ -916,7 +868,7 @@ module.exports = {
     getMinecraftProfile,
     getHypixelData,
     getGameStats,
-
+    
     // Bad words
     addBadWord,
     removeBadWord,
@@ -937,6 +889,7 @@ module.exports = {
 
     // Ticket System
     createTicketChannel,
+    ensureTicketCategory,
 
     // Scheduled Tasks
     checkGiveaways,
