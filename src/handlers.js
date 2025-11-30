@@ -353,7 +353,7 @@ async function handleButton(interaction, client, env) {
             channel.send({ embeds: [claimEmbed] })
         ]);
 
-        // Disable admin buttons when ticket is claimed
+        // Disable only claim button when ticket is claimed (other admin buttons stay active for the claimer)
             const messages = await channel.messages.fetch({ limit: 10 });
             const originalMessage = messages.find(msg => 
                 msg.components.length > 0 && 
@@ -368,33 +368,34 @@ async function handleButton(interaction, client, env) {
             if (originalMessage) {
                 console.log(`🔄 Found ticket creation message for claim: ${originalMessage.id}`);
                 
-                const disabledAdminButtons = new ActionRowBuilder().addComponents(
+                // Keep admin buttons active except claim button (so claimer can still use them)
+                const updatedAdminButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('record_order_admin')
                         .setLabel('📝 Record Order')
                         .setStyle(ButtonStyle.Primary)
-                        .setDisabled(true),
+                        .setDisabled(false), // Keep active for claimer
                     new ButtonBuilder()
                         .setCustomId('complete_purchase_admin')
                         .setLabel('✅ Complete Purchase')
                         .setStyle(ButtonStyle.Success)
-                        .setDisabled(true),
+                        .setDisabled(false), // Keep active for claimer
                     new ButtonBuilder()
                         .setCustomId('claim_ticket')
                         .setLabel('👋 Claim Ticket (Already Claimed)')
                         .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(true)
+                        .setDisabled(true) // Only disable claim button
                 );
 
                 await originalMessage.edit({
                     content: originalMessage.content,
                     embeds: originalMessage.embeds,
-                    components: [originalMessage.components[0], disabledAdminButtons]
+                    components: [originalMessage.components[0], updatedAdminButtons]
                 });
                 
-                console.log('✅ Admin buttons disabled successfully after claim');
+                console.log('✅ Only claim button disabled, other admin buttons remain active for claimer');
             } else {
-                console.log('❌ Could not find ticket creation message to disable buttons');
+                console.log('❌ Could not find ticket creation message to disable claim button');
             }
 
         await interaction.editReply({
