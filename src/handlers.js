@@ -1458,7 +1458,6 @@ async function handleModal(interaction, client, env) {
     await interaction.editReply({
         content: `❌ Error sending message: ${error.message}`
     });
-}
     else {
         // Handle unknown button
         // Check if interaction is already replied/deferred
