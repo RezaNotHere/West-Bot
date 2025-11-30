@@ -1314,6 +1314,9 @@ async function handleModal(interaction, client, env) {
             const color = parts[3] || 'Blue';
             const title = fields.getTextInputValue('advertise_title');
             const message = fields.getTextInputValue('advertise_message');
+            const buttonText = fields.getTextInputValue('advertise_button_text');
+            const buttonLink = fields.getTextInputValue('advertise_button_link');
+            const imageUrl = fields.getTextInputValue('advertise_image_url');
 
             // Get target role and members
             const targetRole = guild.roles.cache.get(targetRoleId);
@@ -1349,13 +1352,38 @@ async function handleModal(interaction, client, env) {
                 .setFooter({ text: `Advertisement sent by ${interaction.user.tag} to ${targetRole.name}` })
                 .setTimestamp();
 
+            // Add image if provided
+            if (imageUrl && imageUrl.trim()) {
+                try {
+                    embed.setImage(imageUrl.trim());
+                } catch (error) {
+                    console.log('Invalid image URL, skipping image:', error.message);
+                }
+            }
+
+            // Prepare message components
+            let components = [];
+            
+            // Add button if both text and link are provided
+            if (buttonText && buttonText.trim() && buttonLink && buttonLink.trim()) {
+                const button = new ButtonBuilder()
+                    .setLabel(buttonText.trim())
+                    .setURL(buttonLink.trim())
+                    .setStyle(ButtonStyle.Link);
+                
+                components = [new ActionRowBuilder().addComponents(button)];
+            }
+
             let successCount = 0;
             let failCount = 0;
 
             // Send advertisement to all members with the role
             for (const member of membersWithRole.values()) {
                 try {
-                    await member.send({ embeds: [embed] });
+                    await member.send({ 
+                        embeds: [embed],
+                        components: components
+                    });
                     successCount++;
                 } catch (error) {
                     failCount++;

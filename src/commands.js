@@ -1071,6 +1071,33 @@ async function handleSlashCommand(interaction) {
                         .setPlaceholder('Enter your advertisement message...')
                         .setRequired(true)
                         .setMaxLength(2000)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_button_text')
+                        .setLabel('Button Text (Optional)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('e.g., Visit Shop, Learn More...')
+                        .setRequired(false)
+                        .setMaxLength(80)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_button_link')
+                        .setLabel('Button Link (Optional)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('https://example.com')
+                        .setRequired(false)
+                        .setMaxLength(500)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('advertise_image_url')
+                        .setLabel('Image URL (Optional)')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('https://example.com/image.jpg')
+                        .setRequired(false)
+                        .setMaxLength(500)
                 )
             );
         
