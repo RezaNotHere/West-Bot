@@ -218,8 +218,21 @@ async function handleButton(interaction, client, env) {
             });
 
             // Update buttons after closing ticket
-            const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
-            if (originalMessage && originalMessage.components.length > 0) {
+            // Find the ticket creation message (first message with buttons)
+            const messages = await channel.messages.fetch({ limit: 10 });
+            const originalMessage = messages.find(msg => 
+                msg.components.length > 0 && 
+                msg.components.some(row => 
+                    row.components.some(btn => 
+                        btn.customId === 'close_ticket_user' || 
+                        btn.customId === 'complete_purchase'
+                    )
+                )
+            );
+            
+            if (originalMessage) {
+                console.log(`🔄 Found ticket creation message: ${originalMessage.id}`);
+                
                 const reopenButton = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('reopen_ticket')
@@ -243,6 +256,10 @@ async function handleButton(interaction, client, env) {
                     embeds: originalMessage.embeds,
                     components: [reopenButton, adminButtons]
                 });
+                
+                console.log('✅ Ticket buttons updated successfully after closing');
+            } else {
+                console.log('❌ Could not find ticket creation message to update buttons');
             }
 
             // Background logging (non-blocking)
@@ -1217,13 +1234,29 @@ async function handleModal(interaction, client, env) {
                 new ButtonBuilder().setCustomId('claim_ticket').setLabel('👋 Claim Ticket').setStyle(ButtonStyle.Secondary)
             );
 
-            const originalMessage = await channel.messages.fetch({ limit: 1 }).then(messages => messages.first()).catch(() => null);
+            // Find the ticket message with reopen/transcript buttons
+            const messages = await channel.messages.fetch({ limit: 10 });
+            const originalMessage = messages.find(msg => 
+                msg.components.length > 0 && 
+                msg.components.some(row => 
+                    row.components.some(btn => 
+                        btn.customId === 'reopen_ticket' || 
+                        btn.customId === 'create_transcript'
+                    )
+                )
+            );
+            
             if (originalMessage) {
+                console.log(`🔄 Found closed ticket message: ${originalMessage.id}`);
                 await originalMessage.edit({
                     content: originalMessage.content,
                     embeds: originalMessage.embeds,
                     components: [userButtons, adminButtons]
                 });
+                
+                console.log('✅ Ticket buttons restored successfully after reopening');
+            } else {
+                console.log('❌ Could not find closed ticket message to restore buttons');
             }
 
             const successEmbed = new EmbedBuilder()
