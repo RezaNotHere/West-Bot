@@ -233,14 +233,12 @@ async function handleButton(interaction, client, env) {
             if (originalMessage) {
                 console.log(`🔄 Found ticket creation message: ${originalMessage.id}`);
                 
-                const reopenButton = new ActionRowBuilder().addComponents(
+                // All buttons in one row for closed tickets
+                const closedTicketButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('reopen_ticket')
                         .setLabel('🔓 باز کردن تیکت')
-                        .setStyle(ButtonStyle.Primary)
-                );
-
-                const adminButtons = new ActionRowBuilder().addComponents(
+                        .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
                         .setCustomId('create_transcript')
                         .setLabel('📋 ساخت ترنسکریپت')
@@ -254,7 +252,7 @@ async function handleButton(interaction, client, env) {
                 await originalMessage.edit({
                     content: originalMessage.content,
                     embeds: originalMessage.embeds,
-                    components: [reopenButton, adminButtons]
+                    components: [closedTicketButtons]
                 });
                 
                 console.log('✅ Ticket buttons updated successfully after closing');
