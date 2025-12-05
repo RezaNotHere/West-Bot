@@ -1,23 +1,5 @@
 const { EmbedBuilder, MessageFlags } = require('discord.js');
 
-// Safe interaction reply helper
-async function safeReply(interaction, options) {
-    try {
-        if (interaction.replied || interaction.deferred) {
-            return await interaction.followUp(options);
-        } else {
-            return await interaction.reply(options);
-        }
-    } catch (error) {
-        if (error.code === 10062) {
-            console.warn('⚠️ Interaction expired or already handled:', error.message);
-        } else {
-            console.error('❌ Interaction reply failed:', error);
-        }
-        return null;
-    }
-}
-
 class InteractionUtils {
     /**
      * Send an error response
@@ -35,18 +17,21 @@ class InteractionUtils {
         const options = { embeds: [errorEmbed], flags: MessageFlags.Ephemeral };
 
         try {
-            if (interaction.deferred) {
+            if (interaction.replied) {
+                // If we've already replied to the interaction, use followUp
+                return await interaction.followUp({ ...options, ephemeral: true });
+            } else if (interaction.deferred) {
+                // If we've deferred but not replied, edit the deferred reply
                 return await interaction.editReply(options);
             } else {
-                return await safeReply(interaction, options);
+                // If we haven't done anything with the interaction yet, reply normally
+                return await interaction.reply(options);
             }
         } catch (error) {
-            if (error.code === 10062) {
-                console.warn('⚠️ Interaction expired or already handled:', error.message);
-            } else {
-                console.error('❌ sendError failed:', error);
+            // Ignore unknown interaction errors as they're not actionable
+            if (error.code !== 10062) {
+                console.error('Failed to send error response:', error);
             }
-            return null;
         }
     }
 
@@ -65,18 +50,21 @@ class InteractionUtils {
         const options = { embeds: [successEmbed], flags: ephemeral ? MessageFlags.Ephemeral : undefined };
         
         try {
-            if (interaction.deferred) {
+            if (interaction.replied) {
+                // If we've already replied to the interaction, use followUp
+                return await interaction.followUp({ ...options, ephemeral: true });
+            } else if (interaction.deferred) {
+                // If we've deferred but not replied, edit the deferred reply
                 return await interaction.editReply(options);
             } else {
-                return await safeReply(interaction, options);
+                // If we haven't done anything with the interaction yet, reply normally
+                return await interaction.reply(options);
             }
         } catch (error) {
-            if (error.code === 10062) {
-                console.warn('⚠️ Interaction expired or already handled:', error.message);
-            } else {
-                console.error('❌ sendSuccess failed:', error);
+            // Ignore unknown interaction errors as they're not actionable
+            if (error.code !== 10062) {
+                console.error('Failed to send success response:', error);
             }
-            return null;
         }
     }
 
@@ -87,13 +75,20 @@ class InteractionUtils {
      */
     static async deferReply(interaction, ephemeral = false) {
         try {
-            await interaction.deferReply({ flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+            // Only defer if we haven't already responded
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.deferReply({ 
+                    flags: ephemeral ? MessageFlags.Ephemeral : undefined 
+                });
+                return true;
+            }
+            return false;
         } catch (error) {
-            if (error.code === 10062) {
-                console.warn('⚠️ Interaction expired while deferring:', error.message);
-            } else {
+            // Ignore unknown interaction errors as they're not actionable
+            if (error.code !== 10062) {
                 console.error('Failed to defer reply:', error);
             }
+            return false;
         }
     }
 }

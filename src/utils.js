@@ -13,6 +13,7 @@ const {
 const axios = require('axios');
 const { db } = require('./database');
 const config = require('../configManager');
+const { createProfileImage: generateProfileImage } = require('./profileImage');
 
 // --- Enhanced Configuration & Constants ---
 const CACHE_DURATION = 5 * 60 * 1000;
@@ -571,10 +572,12 @@ function createCosmeticEmbed(username, uuid, cosmeticCapes, cosmetics, page) {
 
 // Placeholder function for createProfileImage since it was missing in source
 async function createProfileImage(data) {
-    // This requires 'canvas' or similar library. Returning a dummy buffer for now.
-    // You should implement the actual canvas drawing here using data.uuid, data.stats, etc.
-    // console.warn("createProfileImage is using a placeholder. Please implement canvas logic.");
-    return Buffer.from([]); // Return empty buffer or implement canvas
+    try {
+        return await generateProfileImage(data);
+    } catch (error) {
+        console.error('Error generating profile image:', error);
+        return Buffer.from([]);
+    }
 }
 
 async function sendProfileImageEmbed(interaction, uuid, capeUrls, hypixelStats) {
@@ -905,186 +908,229 @@ async function endPoll(messageId) {
 
 async function registerCommands(clientId, guildId, token) {
     // Adding commands to the array
-    commands.length = 0; // Clear existing commands to avoid duplicates if called multiple times
+    commands.length = 0; // Clear existing commands
 
     commands.push(
+        // --- Polls ---
+        new SlashCommandBuilder()
+            .setName('poll')
+            .setDescription('ایجاد یک نظرسنجی جدید')
+            .addStringOption(opt => opt.setName('question').setDescription('سوال نظرسنجی').setRequired(true))
+            .addStringOption(opt => opt.setName('options').setDescription('گزینه‌ها (با | جدا کنید)').setRequired(true))
+            .addStringOption(opt => opt.setName('duration').setDescription('مدت زمان (مثلا: 1h)').setRequired(true))
+            .addChannelOption(opt => opt.setName('channel').setDescription('کانال ارسال').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+            .toJSON(),
+
+        // --- Minecraft ---
         new SlashCommandBuilder()
             .setName("mcinfo")
-            .setDescription("Display complete Minecraft account information on Hypixel")
-            .addStringOption(option => option.setName("username").setDescription("Minecraft username").setRequired(true))
-            .addStringOption(option => option.setName("price").setDescription("Account price (Toman)").setRequired(false))
-            .addBooleanOption(option => option.setName("show_stats").setDescription("Show Hypixel stats").setRequired(false))
-            .addBooleanOption(option => option.setName("show_history").setDescription("Show previous name history").setRequired(false))
+            .setDescription("Display Minecraft account info")
+            .addStringOption(opt => opt.setName("username").setDescription("Minecraft username").setRequired(true))
+            .addStringOption(opt => opt.setName("price").setDescription("Account price").setRequired(false))
+            .addBooleanOption(opt => opt.setName("show_stats").setDescription("Show Hypixel stats").setRequired(false))
+            .addBooleanOption(opt => opt.setName("show_history").setDescription("Show name history").setRequired(false))
             .toJSON(),
 
-        new SlashCommandBuilder()
-            .setName("send_account")
-            .setDescription("Send account information to buyer")
-            .addStringOption(option => option.setName("mail").setDescription("Account email").setRequired(true))
-            .addStringOption(option => option.setName("recovery_code").setDescription("Account recovery code").setRequired(true))
-            .addStringOption(option => option.setName("account_num").setDescription("Account number").setRequired(true))
-            .addStringOption(option => option.setName("username").setDescription("Account username (optional)").setRequired(false))
-            .addStringOption(option => option.setName("password").setDescription("Account password (optional)").setRequired(false))
-            .toJSON(),
-
+        // --- Bad Words ---
         new SlashCommandBuilder()
             .setName('addbadword')
             .setDescription('Add banned word')
-            .addStringOption(opt => opt.setName('word').setDescription('Banned word').setRequired(true))
+            .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
             .toJSON(),
-
         new SlashCommandBuilder()
             .setName('removebadword')
             .setDescription('Remove banned word')
-            .addStringOption(opt => opt.setName('word').setDescription('Banned word').setRequired(true))
+            .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
             .toJSON(),
-
         new SlashCommandBuilder()
             .setName('listbadwords')
-            .setDescription('Show list of banned words')
+            .setDescription('List banned words')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
             .toJSON(),
-
         new SlashCommandBuilder()
             .setName('importbadwords')
-            .setDescription('Import multiple banned words from text')
-            .addStringOption(opt => opt.setName('text').setDescription('Text containing banned words (separated by spaces, commas, or new lines)').setRequired(true))
+            .setDescription('Import banned words from text')
+            .addStringOption(opt => opt.setName('text').setDescription('Text containing words').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
             .toJSON(),
 
+        // --- Moderation ---
+        new SlashCommandBuilder()
+            .setName('warn')
+            .setDescription('Warn a user')
+            .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+            .toJSON(),
         new SlashCommandBuilder()
             .setName('clearwarnings')
             .setDescription('Clear warnings for a user')
             .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))
             .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
             .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('invites')
-            .setDescription('Show invite details for a user')
-            .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('start-giveaway')
-            .setDescription('Start a new giveaway')
-            .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
-            .addStringOption(opt => opt.setName('duration').setDescription('Duration (e.g. 1h, 30m, 2d)').setRequired(true))
-            .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(true))
-            .addStringOption(opt => opt.setName('prize').setDescription('Giveaway prize').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('end-giveaway')
-            .setDescription('End a giveaway')
-            .addStringOption(opt => opt.setName('messageid').setDescription('Giveaway message ID').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('reroll-giveaway')
-            .setDescription('Reroll giveaway (select new winner)')
-            .addStringOption(opt => opt.setName('messageid').setDescription('Giveaway message ID').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('rolestats')
-            .setDescription('Show member count for each server role')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('invites-leaderboard')
-            .setDescription('Show server inviters leaderboard')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('sendrolemenu') // Fixed typo
-            .setDescription('Send role selection menu with buttons')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('sendticketmenu')
-            .setDescription('Send ticket creation menu in ticket channel')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('sendmessage')
-            .setDescription('Send custom message to user or channel')
-            .addChannelOption(option => option.setName('channel').setDescription('Target channel').setRequired(false))
-            .addUserOption(option => option.setName('user').setDescription('Target user').setRequired(false))
-            .addBooleanOption(option => option.setName('embed').setDescription('Send message as embed?').setRequired(false))
-            .addStringOption(option => option.setName('color').setDescription('Embed color').setRequired(false)
-                .addChoices(
-                    { name: '🔵 Blue', value: 'Blue' },
-                    { name: '🟢 Green', value: 'Green' },
-                    { name: '🔴 Red', value: 'Red' },
-                    { name: '🟡 Yellow', value: 'Yellow' },
-                    { name: '🟠 Orange', value: 'Orange' },
-                    { name: '🟣 Purple', value: 'Purple' },
-                    { name: '⚪ Grey', value: 'Grey' }
-                ))
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('warn')
-            .setDescription('Warn a user')
-            .addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Warning reason').setRequired(false).setMaxLength(500))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-            .toJSON(),
-
-        new SlashCommandBuilder()
-            .setName('clear')
-            .setDescription('Clear messages')
-            .addIntegerOption(option => option.setName('amount').setDescription('Number of messages (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
-            .addUserOption(option => option.setName('user').setDescription('Filter by user').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-            .toJSON(),
-
         new SlashCommandBuilder()
             .setName('kick')
-            .setDescription('Kick user from server')
-            .addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(500))
+            .setDescription('Kick user')
+            .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason').setRequired(false))
             .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
             .toJSON(),
-
         new SlashCommandBuilder()
             .setName('ban')
             .setDescription('Ban user')
-            .addUserOption(option => option.setName('user').setDescription('User').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(500))
-            .addIntegerOption(option => option.setName('deletedays').setDescription('Delete messages (0-7 days)').setRequired(false).setMinValue(0).setMaxValue(7))
+            .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason').setRequired(false))
+            .addIntegerOption(opt => opt.setName('deletedays').setDescription('Delete messages days').setRequired(false))
             .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
             .toJSON(),
-
         new SlashCommandBuilder()
             .setName('unban')
             .setDescription('Unban user')
-            .addStringOption(option => option.setName('userid').setDescription('User ID').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason').setRequired(false).setMaxLength(500))
+            .addStringOption(opt => opt.setName('userid').setDescription('User ID').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('clear')
+            .setDescription('Clear messages')
+            .addIntegerOption(opt => opt.setName('amount').setDescription('Amount (1-100)').setRequired(true))
+            .addUserOption(opt => opt.setName('user').setDescription('Filter by user').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+            .toJSON(),
+
+        // --- Security (Missing ones added) ---
+        new SlashCommandBuilder()
+            .setName('security')
+            .setDescription('Manage security settings')
+            .addSubcommand(sub => sub.setName('status').setDescription('Check status'))
+            .addSubcommand(sub => sub.setName('report').setDescription('Security report'))
+            .addSubcommand(sub => sub.setName('reset').setDescription('Reset user security data')
+                .addUserOption(o => o.setName('user').setDescription('User').setRequired(true)))
+            .addSubcommand(sub => sub.setName('blacklist').setDescription('Manage blacklist')
+                .addStringOption(o => o.setName('action').setDescription('add/remove').setRequired(true).addChoices({name:'Add',value:'add'},{name:'Remove',value:'remove'}))
+                .addStringOption(o => o.setName('type').setDescription('Type').setRequired(true).addChoices({name:'User',value:'user'},{name:'Guild',value:'guild'}))
+                .addStringOption(o => o.setName('id').setDescription('ID').setRequired(true)))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('bansupport')
+            .setDescription('Ban user from support tickets')
+            .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('banstats')
+            .setDescription('View support ban statistics')
             .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
             .toJSON(),
 
+        // --- Shop & Cards (Missing ones added) ---
         new SlashCommandBuilder()
-            .setName('userinfo')
-            .setDescription('Show user information')
-            .addUserOption(option => option.setName('user').setDescription('User').setRequired(false))
+            .setName('add_card')
+            .setDescription('Add a bank card')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('list_cards')
+            .setDescription('List bank cards')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('send_card')
+            .setDescription('Send a card to user/channel')
+            .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(false))
+            .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName("send_account")
+            .setDescription("Send account info")
+            .addStringOption(o => o.setName("mail").setDescription("Email").setRequired(true))
+            .addStringOption(o => o.setName("recovery_code").setDescription("Recovery Code").setRequired(true))
+            .addStringOption(o => o.setName("account_num").setDescription("Account Num").setRequired(true))
+            .addStringOption(o => o.setName("username").setDescription("Username").setRequired(false))
+            .addStringOption(o => o.setName("password").setDescription("Password").setRequired(false))
             .toJSON(),
 
+        // --- Giveaways ---
+        new SlashCommandBuilder()
+            .setName('start-giveaway')
+            .setDescription('Start a giveaway')
+            .addChannelOption(opt => opt.setName('channel').setDescription('Channel').setRequired(true))
+            .addStringOption(opt => opt.setName('duration').setDescription('Duration').setRequired(true))
+            .addIntegerOption(opt => opt.setName('winners').setDescription('Winners').setRequired(true))
+            .addStringOption(opt => opt.setName('prize').setDescription('Prize').setRequired(true))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('end-giveaway')
+            .setDescription('End a giveaway')
+            .addStringOption(opt => opt.setName('messageid').setDescription('Message ID').setRequired(true))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('reroll-giveaway')
+            .setDescription('Reroll giveaway')
+            .addStringOption(opt => opt.setName('messageid').setDescription('Message ID').setRequired(true))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+            .toJSON(),
+
+        // --- Utility & Admin ---
+        new SlashCommandBuilder()
+            .setName('advertise')
+            .setDescription('Send advertisement to a role')
+            .addRoleOption(opt => opt.setName('target_role').setDescription('Role').setRequired(true))
+            .addStringOption(opt => opt.setName('color').setDescription('Color').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('sendmessage')
+            .setDescription('Send custom message')
+            .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(false))
+            .addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(false))
+            .addBooleanOption(opt => opt.setName('embed').setDescription('Use embed').setRequired(false))
+            .addStringOption(opt => opt.setName('color').setDescription('Color').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('sendrolemenu')
+            .setDescription('Send role selection menu')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('sendticketmenu')
+            .setDescription('Send ticket menu')
+            .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(false))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+            .toJSON(),
+        
+        // --- Stats ---
+        new SlashCommandBuilder()
+            .setName('invites')
+            .setDescription('Show invites')
+            .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(false))
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('invites-leaderboard')
+            .setDescription('Invites leaderboard')
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('rolestats')
+            .setDescription('Role statistics')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+            .toJSON(),
+        new SlashCommandBuilder()
+            .setName('userinfo')
+            .setDescription('Show user info')
+            .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(false))
+            .toJSON(),
         new SlashCommandBuilder()
             .setName('serverinfo')
-            .setDescription('Show server information')
+            .setDescription('Show server info')
             .toJSON()
     );
 
@@ -1093,7 +1139,7 @@ async function registerCommands(clientId, guildId, token) {
     try {
         console.log('Started refreshing application (/) commands.');
         await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
-        console.log(`Successfully reloaded application (/) commands.`);
+        console.log(`Successfully reloaded ${commands.length} application (/) commands.`);
     } catch (error) { console.error(error); }
     console.log('Created By Reza✨.');
 }

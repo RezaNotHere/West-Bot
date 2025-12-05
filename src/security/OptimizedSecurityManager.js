@@ -85,6 +85,12 @@ class OptimizedSecurityManager {
             blockRate: this.stats.totalRequests > 0 ? (this.stats.blockedRequests / this.stats.totalRequests * 100).toFixed(2) + '%' : '0%'
         };
     }
+
+    // --- متدهای اضافه شده برای جلوگیری از کرش (Dummy Methods) ---
+    toggleEmergencyMode(enabled) { return false; }
+    getSecurityReport() { return { period: 'N/A', totalEvents: 0, eventsByType: {}, topViolators: [], recommendations: ['Not available in Optimized Mode'] }; }
+    getRecentEvents() { return []; }
+    resetUser(userId) { return true; }
 }
 
 module.exports = OptimizedSecurityManager;

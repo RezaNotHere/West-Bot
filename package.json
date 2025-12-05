@@ -88,5 +88,8 @@
   "license": "MIT",
   "engines": {
     "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.7.4"
   }
 }

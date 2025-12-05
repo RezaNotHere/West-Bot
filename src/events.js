@@ -1,80 +1,144 @@
-// events.js
+// src/events.js
+const { EmbedBuilder } = require('discord.js');
 const db = require('./database');
 const utils = require('./utils');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../configManager');
+const spamDetection = require('./spamDetection'); // اضافه شد
+const commands = require('./commands'); // اضافه شد
 
+// متغیرهای داخلی
 let logger = null;
+let security = null;
+
+// توابع تنظیم کننده (Setter)
 const setLogger = (l) => { logger = l; }
+const setSecurity = (s) => { security = s; } // اضافه شد
 
-async function onMessageCreate(message, client, env) {
-    // Skip bot messages
+async function onMessageCreate(message, client) {
+    // نادیده گرفتن پیام‌های خود ربات
     if (message.author.bot) return;
-
-    // --- Bad Words Filter ---
-    if (utils.isBadWord(message.content)) {
-        try {
-            await message.delete();
-        } catch {}
-        // Warn user
-        const warnCount = await utils.addWarning(message.author.id);
-        try {
-            await message.author.send({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor('Red')
-                        .setTitle('⚠️ Behavioral Warning')
-                        .setDescription('Your message was deleted for using banned words. Please follow server rules.')
-                        .addFields({ name: 'Warning Count', value: `${warnCount} / 3` })
-                        .setFooter({ text: 'If repeated, you will be banned from the server.' })
-                        .setTimestamp()
-                ]
-            });
-        } catch {}
-        // Log
-        await utils.logAction(message.guild, `🚫 Message containing banned word deleted from ${message.author.tag}. (${warnCount}/3 warnings)`);
-        
-        if (logger) {
-            await logger.logWarn('Banned Word Detected', {
-                User: `${message.author.tag} (${message.author.id})`,
-                Channel: `${message.channel.name} (${message.channel.id})`,
-                Guild: `${message.guild.name} (${message.guild.id})`,
-                WarningCount: `${warnCount}/3`,
-                Content: message.content.substring(0, 100)
-            }, 'Moderation');
+    
+    try {
+        // ۱. تشخیص اسپم (Spam Detection)
+        const isSpamming = await spamDetection.isSpam(message);
+        if (isSpamming) {
+            await message.delete().catch(() => {});
+            
+            // لاگ کردن اسپم
+            if (logger) {
+                await logger.logInfo('Spam Detected', {
+                    User: `${message.author.tag} (${message.author.id})`,
+                    Channel: `${message.channel.name} (${message.channel.id})`,
+                    MessageCount: spamDetection.getMessageCount(message.author.id)
+                });
+            }
+            return; // توقف پردازش
         }
         
-        // Ban after 3 warnings
-        if (warnCount >= 3) {
-            try {
-                // Send English ban DM
+        // ۲. فیلتر کلمات بد (Bad Words)
+        if (utils.isBadWord(message.content)) {
+            await message.delete().catch(() => {});
+            
+            // ثبت اخطار
+            const warningCount = await utils.addWarning(
+                message.author.id, 
+                'Using inappropriate language', 
+                message.guild.members.me || { tag: 'System', id: '0' }
+            );
+            
+            // بررسی بن خودکار (۳ اخطار)
+            if (warningCount >= 3) {
                 try {
-                    const banEmbed = new EmbedBuilder()
-                        .setColor(0xFF0000)
-                        .setTitle('Banned from Server')
-                        .setDescription('You have been banned from the server for receiving 3 warnings. Contact an admin for more information.')
-                        .setTimestamp();
-                    await message.author.send({ embeds: [banEmbed] });
-                } catch (dmError) {
-                    console.error('Failed to send ban DM:', dmError);
-                }
-                await message.member.ban({ reason: 'Received 3 warnings for repeated use of banned words' });
-                utils.clearWarnings(message.author.id);
-                await utils.logAction(message.guild, `⛔️ ${message.author.tag} banned for receiving 3 warnings.`);
-                
-                if (logger) {
-                    await logger.logModeration('User Auto-Banned (3 Warnings)', 
-                        { tag: 'System', id: '0' }, message.author, {
-                        Reason: 'Received 3 warnings for banned words',
-                        Guild: `${message.guild.name} (${message.guild.id})`
+                    // چک کردن دسترسی بن
+                    if (!message.guild.members.me.permissions.has('BanMembers')) {
+                        console.log('⚠️ Bot missing BanMembers permission for auto-ban');
+                        return;
+                    }
+                    
+                    // ارسال پیام به کاربر قبل از بن
+                    try {
+                        const banDmEmbed = new EmbedBuilder()
+                            .setColor('Red')
+                            .setTitle('Banned from Server')
+                            .setDescription('You have been automatically banned for receiving 3 warnings.')
+                            .setTimestamp();
+                        await message.author.send({ embeds: [banDmEmbed] });
+                    } catch (e) {}
+
+                    // انجام بن
+                    await message.guild.members.ban(message.author, { 
+                        reason: 'Auto-ban: 3 warnings for bad words',
+                        deleteMessageSeconds: 3600 
                     });
+                    
+                    // لاگ کردن بن
+                    if (logger) {
+                        await logger.logModeration('User Auto-Banned', { tag: 'System' }, message.author, {
+                            Reason: '3 warnings reached (Bad Words)',
+                            Guild: message.guild.name
+                        });
+                    }
+                } catch (banError) {
+                    console.error('Failed to auto-ban user:', banError);
                 }
-            } catch {}
+                return; // توقف پردازش
+            }
+            
+            // ارسال اخطار (اگر بن نشد)
+            const warningEmbed = new EmbedBuilder()
+                .setColor(warningCount >= 2 ? 'Orange' : 'Yellow')
+                .setTitle('⚠️ Warning: Inappropriate Language')
+                .setDescription('Your message was deleted for containing inappropriate language.')
+                .addFields(
+                    { name: '⚠️ Warning Count', value: `${warningCount}/3`, inline: true },
+                    { name: '🔔 Reminder', value: '3 warnings = Ban', inline: true }
+                )
+                .setFooter({ text: 'West Bot Moderation' });
+            
+            try {
+                await message.author.send({ embeds: [warningEmbed] });
+            } catch (e) {}
+            
+            return; // توقف پردازش
         }
-        return;
+        
+        // ۳. بررسی‌های امنیتی (Security Manager)
+        if (security) {
+            const securityCheck = await security.checkMessage(message);
+            if (!securityCheck.allowed) {
+                return; // اگر سیستم امنیتی اجازه نداد، متوقف شود
+            }
+        }
+        
+        // ۴. هندل کردن دستورات متنی (Prefix Commands)
+        if (message.content.startsWith(config.bot.prefix)) {
+            const args = message.content.slice(config.bot.prefix.length).trim().split(/ +/);
+            const commandName = args.shift().toLowerCase();
+            
+            await commands.handleTextCommand(message, commandName, args);
+            
+            if (logger) {
+                await logger.logInfo('Text Command Executed', {
+                    User: message.author.tag,
+                    Command: commandName,
+                    Guild: message.guild.name
+                }, 'Command');
+            }
+        }
+
+    } catch (error) {
+        if (logger) {
+            await logger.logError(error, 'Message Handler', {
+                User: message.author.tag,
+                Channel: message.channel.name,
+                Content: message.content.substring(0, 50)
+            });
+        } else {
+            console.error('Message Handler Error:', error);
+        }
     }
-    // ...existing code...
 }
+
 
 async function onGuildMemberAdd(member, client, env) {
     // Welcome new members
@@ -207,5 +271,6 @@ module.exports = {
     onReady,
     onInteractionCreate,
     onGuildBanAdd,
-    setLogger
+    setLogger,
+    setSecurity
 };

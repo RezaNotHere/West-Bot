@@ -53,7 +53,10 @@ const SENSITIVE_COLLECTIONS = [
     'tickets',
     'ticketInfo',
     'pendingAccounts',
-    'giveaways'
+    'giveaways',
+    'cards',
+    'support',
+    'moderation'
 ];
 
 // Define collection settings
@@ -63,10 +66,12 @@ const COLLECTION_SETTINGS = {
     tickets: { fetchAll: false },
     ticketInfo: { fetchAll: false },
     giveaways: { fetchAll: false },
-    cards: { fetchAll: false },
+    cards: { fetchAll: true },
     polls: { fetchAll: false },
     invites: { fetchAll: false },
     pendingAccounts: { fetchAll: true }, // Needed for expiration checks
+    support: { fetchAll: true }, // For support bans and appeals
+    moderation: { fetchAll: false } // For ban history
 };
 
 const db = {};

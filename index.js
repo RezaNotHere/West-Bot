@@ -29,7 +29,7 @@ try {
     console.log('🔄 Bot will continue without security features');
 }
 
-const commandLogger = require('./src/commandLogger');
+// Removed unused imports - logic moved to events.js
 
 // ✅ Validate configuration before starting
 config.validateConfig();
@@ -41,20 +41,17 @@ const logger = new LoggerUtils({
     debug: config.server.environment !== 'production'
 });
 
-// Initialize optimized security manager only if module exists
+// Initialize Security Manager
 let securityManager = null;
-if (OptimizedSecurityManager) {
-    try {
-        securityManager = new OptimizedSecurityManager({
-            adminIds: config.security?.adminIds || []
-        });
-        console.log('✅ OptimizedSecurityManager initialized successfully');
-    } catch (error) {
-        console.error('❌ Failed to initialize OptimizedSecurityManager:', error);
-        securityManager = null;
-    }
-} else {
-    console.warn('⚠️ OptimizedSecurityManager not available');
+if (EnhancedSecurityManager) {
+    securityManager = new EnhancedSecurityManager({
+        adminIds: config.security?.adminIds || []
+    });
+    console.log('✅ Enhanced Security Manager Active');
+} else if (OptimizedSecurityManager) {
+    securityManager = new OptimizedSecurityManager({
+        adminIds: config.security?.adminIds || []
+    });
 }
 
 // Print configuration (only in debug mode and not showing logs)
@@ -116,10 +113,9 @@ if (securityManager) {
 handlers.setConfig(config);
 events.setLogger(logger);
 
-const commandLogger_ins = new (require('./src/commandLogger'))();
+// Removed unused import - logic moved to events.js
 
-// Import spam detection
-const spamDetection = require('./src/spamDetection');
+// Removed unused import - logic moved to events.js
 
 // Event: Ready
 client.once(Events.ClientReady, async () => {
@@ -192,65 +188,34 @@ client.once(Events.ClientReady, async () => {
 // Event: Interaction (Slash Commands) with enhanced security
 client.on(Events.InteractionCreate, async (interaction) => {
     try {
-        // Enhanced security check only if security manager exists and has the method
-        if (securityManager && typeof securityManager.checkInteractionSecurity === 'function') {
-            try {
-                const securityCheck = await securityManager.checkInteractionSecurity(interaction);
-                if (!securityCheck.allowed) {
-                    try {
-                        if (interaction.replied || interaction.deferred) {
-                            await interaction.followUp({ 
-                                content: securityCheck.message || 'Access denied',
-                                flags: MessageFlags.Ephemeral
-                            });
-                        } else {
-                            await interaction.reply({ 
-                                content: securityCheck.message || 'Access denied',
-                                flags: MessageFlags.Ephemeral
-                            });
-                        }
-                    } catch (replyError) {
-                        // Ignore interaction errors (expired, already responded, etc.)
-                        console.warn('Security check response failed:', replyError.message);
-                    }
-                    return;
+        // Enhanced security check only if security manager exists
+        if (securityManager) {
+            const securityCheck = await securityManager.checkInteractionSecurity(interaction);
+            if (!securityCheck.allowed) {
+                if (interaction.replied || interaction.deferred) {
+                    await interaction.followUp({ 
+                        content: securityCheck.message || 'Access denied',
+                        flags: MessageFlags.Ephemeral
+                    });
+                } else {
+                    await interaction.reply({ 
+                        content: securityCheck.message || 'Access denied',
+                        flags: MessageFlags.Ephemeral
+                    });
                 }
-            } catch (securityError) {
-                console.warn('Security check failed:', securityError.message);
-                // Continue without security check
+                return;
             }
-        } else if (!securityManager) {
-            // Security manager not available, continue without security
-            console.debug('Security manager not available, skipping security check');
-        } else {
-            // Method not available, continue without security
-            console.warn('checkInteractionSecurity method not available, skipping security check');
         }
 
         // Handle different interaction types
-        try {
-            if (interaction.isChatInputCommand()) {
-                await commandLogger_ins.logCommand(interaction);
-                await commands.handleSlashCommand(interaction);
-            } else if (interaction.isButton()) {
-                await handlers.handleButton(interaction, client, config);
-            } else if (interaction.isStringSelectMenu()) {
-                await handlers.handleSelectMenu(interaction, client);
-            } else if (interaction.isModalSubmit()) {
-                await handlers.handleModalSubmit(interaction, client);
-            }
-        } catch (interactionError) {
-            // Handle Discord API errors gracefully
-            if (interactionError.code === 10062) { // Unknown interaction
-                console.warn('⚠️ Interaction expired or already handled:', interactionError.message);
-            } else if (interactionError.code === 10008) { // Unknown member
-                console.warn('⚠️ Member not found:', interactionError.message);
-            } else if (interactionError.code === 10013) { // Unknown user
-                console.warn('⚠️ User not found:', interactionError.message);
-            } else {
-                // Log other errors normally
-                console.error('❌ Interaction handling error:', interactionError);
-            }
+        if (interaction.isChatInputCommand()) {
+            await commands.handleSlashCommand(interaction);
+        } else if (interaction.isButton()) {
+            await handlers.handleButton(interaction, client, config);
+        } else if (interaction.isStringSelectMenu()) {
+            await handlers.handleSelectMenu(interaction, client);
+        } else if (interaction.isModalSubmit()) {
+            await handlers.handleModalSubmit(interaction, client);
         }
     } catch (error) {
         await logger.logError(error, 'Interaction Handler', {
@@ -261,198 +226,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// Event: Message Create
-client.on(Events.MessageCreate, async (message) => {
-    // Ignore bot messages
-    if (message.author.bot) return;
+// Set up modules with enhanced security
+utils.setClient(client);
+utils.setLogger(logger);
+commands.setLogger(logger);
+
+// تنظیمات Events Handler
+events.setLogger(logger);
+if (securityManager) {
+    commands.setSecurity(securityManager);
+    handlers.setSecurity(securityManager);
     
-    try {
-        // 🚨 Spam Detection
-        const isSpamming = await spamDetection.isSpam(message);
-        if (isSpamming) {
-            // Delete spam messages
-            await message.delete().catch(() => {});
-            
-            // Log spam detection
-            await logger.logInfo('Spam Detected', {
-                User: `${message.author.tag} (${message.author.id})`,
-                Channel: `${message.channel.name} (${message.channel.id})`,
-                MessageCount: spamDetection.getMessageCount(message.author.id)
-            });
-            
-            return; // Stop processing
-        }
-        
-        // 🚫 Bad Words Detection
-        const utils = require('./src/utils');
-        if (utils.isBadWord(message.content)) {
-            // Delete message with bad words
-            await message.delete().catch(() => {});
-            
-            // Add warning to user
-            const warningCount = await utils.addWarning(message.author.id, 'Using inappropriate language (bad words)', message.guild.members.me || { tag: 'System', id: '0' });
-            
-            // Check if user should be banned (3 warnings = ban)
-            if (warningCount >= 3) {
-                try {
-                    // Check if bot has ban permissions
-                    if (!message.guild.members.me.permissions.has('BanMembers')) {
-                        console.log('⚠️ Bot missing BanMembers permission for auto-ban');
-                        
-                        // Send notification to support about missing permissions
-                        const permErrorEmbed = new EmbedBuilder()
-                            .setColor('Orange')
-                            .setTitle('⚠️ Missing Permissions for Auto-Ban')
-                            .setDescription(`User reached 3 warnings but bot lacks ban permissions.`)
-                            .addFields(
-                                { name: '👤 User', value: `${message.author.tag} (${message.author.id})`, inline: false },
-                                { name: '⚠️ Warning Count', value: `${warningCount}/3`, inline: true },
-                                { name: '🔧 Required Permission', value: 'BanMembers', inline: true },
-                                { name: '📝 Suggestion', value: 'Please give the bot BanMembers permission or ban manually', inline: false }
-                            )
-                            .setTimestamp()
-                            .setFooter({ text: 'West Bot Auto-Moderation System' });
-                        
-                        const supportChannelId = config.channels.log || config.channels.support;
-                        if (supportChannelId) {
-                            const supportChannel = message.guild.channels.cache.get(supportChannelId);
-                            if (supportChannel) {
-                                await supportChannel.send({ embeds: [permErrorEmbed] });
-                            }
-                        }
-                        
-                        return; // Stop processing
-                    }
-                    
-                    // Ban the user
-                    await message.guild.members.ban(message.author, { 
-                        reason: '3 warnings for inappropriate language (auto-ban)',
-                        deleteMessageDays: 1 
-                    });
-                    
-                    // Send ban notification to support channel
-                    const banEmbed = new EmbedBuilder()
-                        .setColor('Red')
-                        .setTitle('🔨 USER AUTO-BANNED')
-                        .setDescription(`User has been automatically banned after 3 warnings.`)
-                        .addFields(
-                            { name: '👤 Banned User', value: `${message.author.tag} (${message.author.id})`, inline: false },
-                            { name: '⚠️ Warning Count', value: `${warningCount}/3`, inline: true },
-                            { name: '📝 Reason', value: 'Inappropriate language (bad words)', inline: true },
-                            { name: '🔧 Action', value: 'Auto-ban (3 warnings reached)', inline: true },
-                            { name: '📅 Date', value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true }
-                        )
-                        .setTimestamp()
-                        .setFooter({ text: 'West Bot Auto-Moderation System' });
-                    
-                    // Send to support/log channel
-                    const supportChannelId = config.channels.log || config.channels.support;
-                    if (supportChannelId) {
-                        const supportChannel = message.guild.channels.cache.get(supportChannelId);
-                        if (supportChannel) {
-                            await supportChannel.send({ embeds: [banEmbed] });
-                            
-                            // Also try to send DM to banned user
-                            try {
-                                const dmEmbed = new EmbedBuilder()
-                                    .setColor('Red')
-                                    .setTitle('🔨 You have been banned')
-                                    .setDescription('You have been automatically banned from the server.')
-                                    .addFields(
-                                        { name: '⚠️ Reason', value: 'You received 3 warnings for inappropriate language', inline: false },
-                                        { name: '📊 Warning Count', value: `${warningCount}/3`, inline: true },
-                                        { name: '📝 Note', value: 'This is an automatic action. If you believe this is a mistake, please contact server administration.', inline: false }
-                                    )
-                                    .setTimestamp()
-                                    .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() });
-                                
-                                await message.author.send({ embeds: [dmEmbed] });
-                            } catch (dmError) {
-                                // Can't send DM, ignore
-                            }
-                        }
-                    }
-                    
-                    // Log the ban
-                    await logger.logInfo('User Auto-Banned (3 Warnings)', {
-                        Moderator: `${message.guild.members.me?.tag || 'System'} (${message.guild.members.me?.id || '0'})`,
-                        Target: `${message.author.tag} (${message.author.id})`,
-                        WarningCount: warningCount,
-                        Reason: 'Inappropriate language (bad words)',
-                        Action: 'Auto-ban after 3 warnings',
-                        Channel: `${message.channel.name} (${message.channel.id})`
-                    });
-                    
-                } catch (banError) {
-                    console.error('Failed to ban user:', banError);
-                }
-                
-                return; // Stop processing
-            }
-            
-            // Send warning to user (if not banned)
-            const warningEmbed = new EmbedBuilder()
-                .setColor(warningCount >= 2 ? 'Orange' : 'Yellow')
-                .setTitle('⚠️ Warning: Inappropriate Language')
-                .setDescription('Your message was deleted for containing inappropriate language.')
-                .addFields(
-                    { name: '📝 Rule Violation', value: 'Use of prohibited words is not allowed.', inline: false },
-                    { name: '⚡ Action Taken', value: 'Message deleted automatically', inline: false },
-                    { name: '⚠️ Warning Count', value: `${warningCount}/3 (3 warnings = ban)`, inline: true },
-                    { name: '🔔 Reminder', value: 'Repeated violations will result in a ban.', inline: false }
-                )
-                .setTimestamp()
-                .setFooter({ text: 'West Bot Moderation System' });
-            
-            try {
-                await message.author.send({ embeds: [warningEmbed] });
-            } catch (dmError) {
-                // Can't send DM, ignore
-            }
-            
-            // Log bad word detection
-            await logger.logInfo('Bad Word Detected', {
-                Moderator: `${message.guild.members.me?.tag || 'System'} (${message.guild.members.me?.id || '0'})`,
-                Target: `${message.author.tag} (${message.author.id})`,
-                Channel: `${message.channel.name} (${message.channel.id})`,
-                Message: message.content.substring(0, 100),
-                WarningCount: `${warningCount}/3`,
-                Action: 'Message deleted + Warning added'
-            });
-            
-            return; // Stop processing
-        }
-        
-        // Security checks
-        if (securityManager) {
-            const securityCheck = await securityManager.checkMessage(message);
-            if (!securityCheck.allowed) {
-                // Security system handles the action (delete, mute, etc.)
-                return;
-            }
-        }
-        
-        // Handle text commands with prefix
-        if (message.content.startsWith(config.bot.prefix)) {
-            const args = message.content.slice(config.bot.prefix.length).trim().split(/ +/);
-            const commandName = args.shift().toLowerCase();
-            await commands.handleTextCommand(message, commandName, args);
-            
-            await logger.logInfo('Text Command Executed', {
-                User: `${message.author.tag} (${message.author.id})`,
-                Command: commandName,
-                Args: args.join(' '),
-                Channel: `${message.channel.name} (${message.channel.id})`,
-                Guild: `${message.guild?.name} (${message.guild?.id})`
-            }, 'Text Command');
-        }
-    } catch (error) {
-        await logger.logError(error, 'Message Handler', {
-            User: `${message.author.tag} (${message.author.id})`,
-            Channel: `${message.channel.name} (${message.channel.id})`,
-            Content: message.content.substring(0, 100)
-        });
-    }
+    // ✅ اضافه کردن سکیوریتی منیجر به ایونت‌ها
+    events.setSecurity(securityManager);
+}
+handlers.setLogger(logger);
+handlers.setConfig(config);
+client.on(Events.MessageCreate, async (message) => {
+    await events.onMessageCreate(message, client);
 });
 
 // Event: Guild Member Add
@@ -563,6 +354,12 @@ process.on('uncaughtException', async error => {
         ErrorType: error?.name || 'Unknown'
     });
 });
+
+const transcript = require('./src/utils/transcript');
+// پاکسازی هر 24 ساعت
+setInterval(() => {
+    transcript.cleanupOldTranscripts();
+}, 24 * 60 * 60 * 1000);
 
 // Login
 client.login(config.bot.token);

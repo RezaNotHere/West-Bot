@@ -14,27 +14,44 @@ const setLogger = (l) => { logger = l; }
 const setSecurity = (s) => { security = s; }
 const setConfig = (c) => { configInstance = c; }
 
-// Safe interaction reply helper
-async function safeReply(interaction, options) {
-    try {
-        if (interaction.replied || interaction.deferred) {
-            return await interaction.followUp(options);
-        } else {
-            return await interaction.reply(options);
-        }
-    } catch (error) {
-        if (error.code === 10062) {
-            console.warn('⚠️ Interaction expired or already handled:', error.message);
-        } else {
-            console.error('❌ Interaction reply failed:', error);
-        }
-        return null;
-    }
-}
-
 // --- handleButton ---
 async function handleButton(interaction, client, env) {
     console.log(`🔘 Button clicked: ${interaction.customId} by ${interaction.user.tag} in channel ${interaction.channel?.name || 'DM'}`);
+    
+// --- Poll Voting ---
+if (interaction.customId.startsWith('poll_vote_')) {
+    const optionIndex = parseInt(interaction.customId.split('_')[2]);
+    const poll = db.polls.get(interaction.message.id);
+
+    if (!poll || poll.ended) {
+        return await safeReply(interaction, { content: '❌ این نظرسنجی به پایان رسیده است.', flags: MessageFlags.Ephemeral });
+    }
+
+    // چک کردن رای قبلی کاربر
+    const userId = interaction.user.id;
+    const previousVoteIndex = poll.voters ? poll.voters[userId] : undefined;
+
+    if (previousVoteIndex !== undefined) {
+        if (previousVoteIndex === optionIndex) {
+            return await safeReply(interaction, { content: '⚠️ شما قبلاً به این گزینه رای داده‌اید.', flags: MessageFlags.Ephemeral });
+        }
+        // حذف رای قبلی (تغییر رای)
+        poll.options[previousVoteIndex].votes--;
+    }
+
+    // ثبت رای جدید
+    poll.options[optionIndex].votes++;
+    if (!poll.voters) poll.voters = {};
+    poll.voters[userId] = optionIndex;
+
+    // آپدیت دیتابیس
+    db.polls.set(interaction.message.id, poll);
+
+    // آپدیت امبد (اختیاری: برای اینکه اسپم نشود، هر بار آپدیت نکنیم بهتر است، اما برای نمایش زنده آمار می‌توان آپدیت کرد)
+    // در اینجا فقط پیام تایید به کاربر می‌دهیم
+    
+    await safeReply(interaction, { content: `✅ رای شما برای گزینه **${poll.options[optionIndex].name}** ثبت شد.`, flags: MessageFlags.Ephemeral });
+    }
     
     // Handle appeal support ban button
     if (interaction.customId.startsWith('appeal_support_ban_')) {
@@ -42,14 +59,14 @@ async function handleButton(interaction, client, env) {
         
         // Check if this user is trying to appeal their own ban
         if (interaction.user.id !== userId) {
-            return await safeReply(interaction, { 
+            return await interaction.reply({ 
                 content: '❌ You can only appeal your own support ban.', 
                 flags: MessageFlags.Ephemeral 
             });
         }
 
         // Check cooldown (1 hour after denial)
-        const appeals = db.get('support_appeals') || {};
+        const appeals = db.support.get('appeals') || {};
         const userAppeal = appeals[userId];
         
         if (userAppeal && userAppeal.status === 'denied') {
@@ -58,7 +75,7 @@ async function handleButton(interaction, client, env) {
             
             if (timeSinceDenial < oneHour) {
                 const remainingTime = Math.ceil((oneHour - timeSinceDenial) / (60 * 1000));
-                return await safeReply(interaction, { 
+                return await interaction.reply({ 
                     content: `❌ You must wait ${remainingTime} more minutes before submitting another appeal.`, 
                     flags: MessageFlags.Ephemeral 
                 });
@@ -98,7 +115,7 @@ async function handleButton(interaction, client, env) {
     if (interaction.customId.startsWith('approve_appeal_') || interaction.customId.startsWith('deny_appeal_')) {
         // Check if user has permission to handle appeals
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-            return await safeReply(interaction, { 
+            return await interaction.reply({ 
                 content: '❌ You do not have permission to handle appeals.', 
                 flags: MessageFlags.Ephemeral 
             });
@@ -109,11 +126,11 @@ async function handleButton(interaction, client, env) {
 
         try {
             // Get appeal data
-            const appeals = db.get('support_appeals') || {};
+            const appeals = db.support.get('appeals') || {};
             const appeal = appeals[userId];
             
             if (!appeal) {
-                return await safeReply(interaction, { 
+                return await interaction.reply({ 
                     content: '❌ Appeal not found.', 
                     flags: MessageFlags.Ephemeral 
                 });
@@ -124,16 +141,16 @@ async function handleButton(interaction, client, env) {
             
             if (action === 'approve') {
                 // Remove from support bans
-                const supportBans = db.get('support_bans') || [];
+                const supportBans = db.support.get('bans') || [];
                 const updatedBans = supportBans.filter(ban => ban.user_id !== userId);
-                db.set('support_bans', updatedBans);
+                db.support.set('bans', updatedBans);
 
                 // Update appeal status
                 appeal.status = 'approved';
                 appeal.approved_at = Date.now();
                 appeal.approved_by = interaction.user.id;
                 appeals[userId] = appeal;
-                db.set('support_appeals', appeals);
+                db.support.set('appeals', appeals);
 
                 // Create invite link
                 const invite = await interaction.guild.invites.create(config.channels.welcome || interaction.guild.systemChannelId, {
@@ -177,12 +194,12 @@ async function handleButton(interaction, client, env) {
                 });
 
                 // Update ban history
-                const banHistory = db.get('ban_history') || {};
+                const banHistory = db.moderation.get('history') || {};
                 if (banHistory[userId]) {
                     banHistory[userId].appeals_approved = (banHistory[userId].appeals_approved || 0) + 1;
                     banHistory[userId].last_action = Date.now();
                     banHistory[userId].last_action_by = `${interaction.user.tag} (${interaction.user.id})`;
-                    db.set('ban_history', banHistory);
+                    db.moderation.set('history', banHistory);
                 }
 
                 if (logger) {
@@ -200,7 +217,7 @@ async function handleButton(interaction, client, env) {
                 appeal.denied_at = Date.now();
                 appeal.denied_by = interaction.user.id;
                 appeals[userId] = appeal;
-                db.set('support_appeals', appeals);
+                db.support.set('appeals', appeals);
 
                 // Notify user
                 if (targetUser) {
@@ -237,12 +254,12 @@ async function handleButton(interaction, client, env) {
                 });
 
                 // Update ban history
-                const banHistory = db.get('ban_history') || {};
+                const banHistory = db.moderation.get('history') || {};
                 if (banHistory[userId]) {
                     banHistory[userId].appeals_denied = (banHistory[userId].appeals_denied || 0) + 1;
                     banHistory[userId].last_action = Date.now();
                     banHistory[userId].last_action_by = `${interaction.user.tag} (${interaction.user.id})`;
-                    db.set('ban_history', banHistory);
+                    db.moderation.set('history', banHistory);
                 }
 
                 if (logger) {
@@ -257,7 +274,7 @@ async function handleButton(interaction, client, env) {
 
         } catch (error) {
             console.error('Error handling appeal decision:', error);
-            await safeReply(interaction, { 
+            await interaction.reply({ 
                 content: '❌ Error processing appeal decision.', 
                 flags: MessageFlags.Ephemeral 
             });
@@ -287,16 +304,16 @@ async function handleButton(interaction, client, env) {
                         `${index + 1}. \`${entry.name}\`${entry.changedToAt ? ` - <t:${Math.floor(entry.changedToAt / 1000)}:R>` : ' (Original)'}`
                     ).join('\n'))
                     .setFooter({ text: `UUID: ${uuid}` });
-                await safeReply(interaction, { embeds: [historyEmbed], flags: MessageFlags.Ephemeral });
+                await interaction.reply({ embeds: [historyEmbed], flags: MessageFlags.Ephemeral });
             } else {
-                await safeReply(interaction, {
+                await interaction.reply({
                     content: '❌ Username history not found.',
                     flags: MessageFlags.Ephemeral
                 });
             }
         } catch (error) {
             console.error('Error handling name history button:', error);
-            await safeReply(interaction, {
+            await interaction.reply({
                 content: '❌ Error fetching username history',
                 flags: MessageFlags.Ephemeral
             });
@@ -338,7 +355,7 @@ async function handleButton(interaction, client, env) {
         } catch (err) {
             console.error('Error updating giveaway embed:', err);
         }
-        await safeReply(interaction, { content: 'You have successfully joined the giveaway! Good luck! 🎉', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: 'You have successfully joined the giveaway! Good luck! 🎉', flags: MessageFlags.Ephemeral });
         return;
     }
     console.log(`Checking role button for customId='${interaction.customId}' (startsWith 'rolebtn_': ${interaction.customId ? interaction.customId.startsWith('rolebtn_') : false})`);
@@ -375,13 +392,13 @@ async function handleButton(interaction, client, env) {
                 emoji = '➕';
             }
             const embed = new EmbedBuilder().setColor(color).setDescription(`${emoji} ${action}: <@&${roleId}>`);
-            await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
+            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         } catch (err) {
             console.error('Error handling role button:', err);
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setDescription('❌ خطا در مدیریت رول. ممکن است رول بالاتر از رول ربات باشد یا دسترسی لازم وجود نداشته باشد.');
-            await safeReply(interaction, { embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
         return;
     }
@@ -465,7 +482,7 @@ async function handleButton(interaction, client, env) {
 
             // Update buttons after closing ticket
             // Find the ticket creation message (first message with buttons)
-            const messages = await channel.messages.fetch({ limit: 10 });
+            const messages = await channel.messages.fetch({ limit: 100 });
             const originalMessage = messages.find(msg => 
                 msg.components.length > 0 && 
                 msg.components.some(row => 
@@ -530,7 +547,7 @@ async function handleButton(interaction, client, env) {
             // Comprehensive error handling for interaction states
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await safeReply(interaction, {
+                    await interaction.reply({
                         content: '❌ خطایی در بستن تیکت رخ داد.',
                         flags: MessageFlags.Ephemeral
                     });
@@ -594,7 +611,7 @@ async function handleButton(interaction, client, env) {
         ]);
 
         // Disable only claim button when ticket is claimed (other admin buttons stay active for the claimer)
-            const messages = await channel.messages.fetch({ limit: 10 });
+            const messages = await channel.messages.fetch({ limit: 100 });
             const originalMessage = messages.find(msg => 
                 msg.components.length > 0 && 
                 msg.components.some(row => 
@@ -748,7 +765,7 @@ async function handleButton(interaction, client, env) {
             .setTitle('✅ سفارش تکمیل شد')
             .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} با موفقیت تکمیل و تحویل داده شد.\n\nکاربر اطلاع‌رسانی شده و می‌تواند نظر خود را ثبت کند.`);
 
-        await safeReply(interaction, { embeds: [completionEmbed] });
+        await interaction.reply({ embeds: [completionEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} تکمیل شد.`);
         
         if (logger) {
@@ -801,7 +818,7 @@ async function handleButton(interaction, client, env) {
             .setTitle('📝 سفارش ثبت شد')
             .setDescription(`سفارش <@${owner.id}> توسط ${interaction.user} ثبت شد و در صف پردازش قرار گرفت.\n\nکاربر اطلاع‌رسانی شده و منتظر تکمیل سفارش است.`);
 
-        await safeReply(interaction, { embeds: [recordEmbed] });
+        await interaction.reply({ embeds: [recordEmbed] });
         await logAction(guild, `سفارش تیکت ${channel.name} توسط ${interaction.user.tag} ثبت شد.`);
         
         if (logger) {
@@ -842,7 +859,7 @@ async function handleButton(interaction, client, env) {
             const errorEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setDescription('❌ شما اجازه مدیریت تیکت‌ها را ندارید.');
-            return await safeReply(interaction, { embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
 
         // Check if interaction is already replied/deferred
@@ -903,7 +920,7 @@ async function handleButton(interaction, client, env) {
 
             // Restore original ticket buttons
             try {
-                const messages = await channel.messages.fetch({ limit: 20 });
+                const messages = await channel.messages.fetch({ limit: 100 });
                 const ticketMessage = messages.find(msg =>
                     msg.author.id === client.user.id &&
                     msg.embeds[0]?.title?.includes('تیکت') &&
@@ -975,7 +992,7 @@ async function handleButton(interaction, client, env) {
     else if (customId === 'ticket_delete') {
         // Handle ticket deletion
         if (!interaction.member.permissions.has('ManageChannels')) {
-            return await safeReply(interaction, {
+            return await interaction.reply({
                 content: '❌ You do not have permission to manage tickets.',
                 flags: MessageFlags.Ephemeral
             });
@@ -990,7 +1007,7 @@ async function handleButton(interaction, client, env) {
         const processingEmbed = new EmbedBuilder()
             .setColor('Yellow')
             .setDescription('⏳ در حال حذف تیکت...');
-        await safeReply(interaction, { embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
+        await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
 
         // Process deletion in background
         setImmediate(async () => {
@@ -1227,7 +1244,7 @@ async function handleButton(interaction, client, env) {
             );
 
             // Find the ticket message with reopen/transcript buttons
-            const messages = await channel.messages.fetch({ limit: 10 });
+            const messages = await channel.messages.fetch({ limit: 100 });
             const originalMessage = messages.find(msg => 
                 msg.components.length > 0 && 
                 msg.components.some(row => 
@@ -1336,7 +1353,7 @@ async function handleSelectMenu(interaction, client, env) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         // Check if user is banned from support
-        const supportBans = db.get('support_bans') || [];
+        const supportBans = db.support.get('bans') || [];
         const activeBan = supportBans.find(ban => ban.user_id === user.id && ban.status === 'active');
         
         if (activeBan) {
@@ -1383,7 +1400,7 @@ async function handleSelectMenu(interaction, client, env) {
                     .setTimestamp();
 
                 // Check if user can appeal (not denied recently)
-                const appeals = db.get('support_appeals') || {};
+                const appeals = db.support.get('appeals') || {};
                 const userAppeal = appeals[user.id];
                 
                 let canAppeal = true;
@@ -1479,7 +1496,7 @@ async function handleModal(interaction, client, env) {
             }
 
             // Store appeal in database
-            const appeals = db.get('support_appeals') || {};
+            const appeals = db.support.get('appeals') || {};
             appeals[userId] = {
                 user_id: userId,
                 user_tag: user.tag,
@@ -1488,7 +1505,7 @@ async function handleModal(interaction, client, env) {
                 submitted_at: Date.now(),
                 status: 'pending'
             };
-            db.set('support_appeals', appeals);
+            db.support.set('appeals', appeals);
 
             // Create appeal embed for staff review
             const appealEmbed = new EmbedBuilder()
@@ -1589,7 +1606,7 @@ async function handleModal(interaction, client, env) {
             }
 
             // Get existing cards
-            const cards = db.get('bank_cards') || [];
+            const cards = db.cards.get('all_cards') || [];
             
             // Add new card
             const newCard = {
@@ -1662,7 +1679,7 @@ async function handleModal(interaction, client, env) {
             }
 
             const successEmbed = new EmbedBuilder().setColor('Green').setDescription('Thank you! Your review and rating have been submitted successfully.');
-            await safeReply(interaction, { embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
 
             if (BUYER_ROLE_ID) {
                 const member = await guild.members.fetch(user.id);
@@ -1672,7 +1689,7 @@ async function handleModal(interaction, client, env) {
             // Only reply if not already replied
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await safeReply(interaction, { content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
+                    await interaction.reply({ content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1712,7 +1729,7 @@ async function handleModal(interaction, client, env) {
             }
 
             // Create ticket channel with details
-            await createTicketChannel(guild, user, reason, null, details);
+            await createTicketChannel(guild, user, reason, details);
             const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
             
             const successEmbed = new EmbedBuilder()
@@ -1745,7 +1762,7 @@ async function handleModal(interaction, client, env) {
                 }
             } else if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await safeReply(interaction, { content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1782,7 +1799,7 @@ async function handleModal(interaction, client, env) {
                 .setColor('Green')
                 .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
-            await safeReply(interaction, { embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
             
             if (logger) {
                 await logger.logTicket('Created (other)', user, {
@@ -1795,7 +1812,7 @@ async function handleModal(interaction, client, env) {
             // Only reply if not already replied
             if (!interaction.replied && !interaction.deferred) {
                 try {
-                    await safeReply(interaction, { content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
                     // If reply fails, log it but don't throw
                     if (logger) {
@@ -1955,7 +1972,7 @@ async function handleModal(interaction, client, env) {
 
         } catch (err) {
             if (!interaction.replied && !interaction.deferred) {
-                await safeReply(interaction, { content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
+                await interaction.reply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
             } else {
                 await interaction.editReply({ content: '❌ Error sending advertisement.', flags: MessageFlags.Ephemeral });
             }

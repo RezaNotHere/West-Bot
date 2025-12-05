@@ -18,24 +18,6 @@ const InteractionUtils = require('./utils/InteractionUtils');
 const config = require('../configManager');
 const { ValidationError, PermissionError } = require('./errors/BotError');
 
-// Safe interaction reply helper
-async function safeReply(interaction, options) {
-    try {
-        if (interaction.replied || interaction.deferred) {
-            return await interaction.followUp(options);
-        } else {
-            return await interaction.reply(options);
-        }
-    } catch (error) {
-        if (error.code === 10062) {
-            console.warn('⚠️ Interaction expired or already handled:', error.message);
-        } else {
-            console.error('❌ Interaction reply failed:', error);
-        }
-        return null;
-    }
-}
-
 // Conditional imports for security modules (may not exist in production)
 let InputValidator = null;
 let SecurityCommands = null;
@@ -79,7 +61,7 @@ async function handleSlashCommand(interaction) {
     // --- /mcinfo ---
     if (interaction.commandName === 'mcinfo') {
         await InteractionUtils.deferReply(interaction, false);
-        const username = interaction.options.getString("username")?.trim();
+        let username = interaction.options.getString("username")?.trim();
         
         // Enhanced input validation only if validator exists
         if (!username) {
@@ -236,7 +218,7 @@ async function handleSlashCommand(interaction) {
             .setTitle('📝 List of Banned Words')
             .setDescription(list.length ? list.join(', ') : 'List is empty.')
             .setTimestamp();
-        await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -299,7 +281,7 @@ async function handleSlashCommand(interaction) {
                 });
             }
             
-            await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
+            await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             
             // Log the import action
             if (logger) {
@@ -451,7 +433,7 @@ async function handleSlashCommand(interaction) {
             
             db.giveaways.set(msg.id, giveawayData);
             
-            await InteractionUtils.sendSuccess(interaction, `Giveaway created successfully! [View](${msg.url})`);
+            await interaction.reply({ content: `Giveaway created successfully! [View](${msg.url})`, flags: MessageFlags.Ephemeral });
             utils.checkGiveaways();
             return;
         } catch (error) {
@@ -611,7 +593,7 @@ async function handleSlashCommand(interaction) {
     }
 
     // --- /sentrolemenu ---
-    if (interaction.commandName === 'sentrolemenu') {
+    if (interaction.commandName === 'sendrolemenu') {
         if (!interaction.channel || interaction.channel.type !== 0) {
             return await InteractionUtils.sendError(interaction, 'This command can only be used in text channels.');
         }
@@ -1080,6 +1062,122 @@ async function handleSlashCommand(interaction) {
         return await securityCommands.handleSecurityCommand(interaction);
     }
 
+// --- /poll ---
+    if (interaction.commandName === 'poll') {
+        // بررسی دسترسی
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+            return await InteractionUtils.sendError(interaction, 'شما دسترسی لازم برای ایجاد نظرسنجی را ندارید.');
+        }
+
+        const question = interaction.options.getString('question');
+        const optionsString = interaction.options.getString('options');
+        const durationStr = interaction.options.getString('duration');
+        const channel = interaction.options.getChannel('channel') || interaction.channel;
+
+        // پردازش گزینه‌ها (جدا کردن با |)
+        const optionsList = optionsString.split('|').map(opt => opt.trim()).filter(opt => opt.length > 0);
+        
+        if (optionsList.length < 2) {
+            return await InteractionUtils.sendError(interaction, 'لطفا حداقل ۲ گزینه وارد کنید (گزینه‌ها را با | جدا کنید).', true);
+        }
+        if (optionsList.length > 5) {
+            return await InteractionUtils.sendError(interaction, 'حداکثر ۵ گزینه مجاز است.', true);
+        }
+
+        // پردازش زمان
+        const ms = utils.ms(durationStr);
+        if (!ms || ms < 60000) { // حداقل 1 دقیقه
+            return await InteractionUtils.sendError(interaction, 'فرمت زمان نامعتبر است یا کمتر از ۱ دقیقه است. (مثال صحیح: 1h, 30m)', true);
+        }
+
+        const endTime = Date.now() + ms;
+        const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+
+        // آماده‌سازی گزینه‌ها برای ذخیره و نمایش
+        const pollOptions = optionsList.map((opt, index) => ({
+            name: opt,
+            votes: 0,
+            emoji: emojis[index]
+        }));
+
+        // ساخت متن پیام نظرسنجی
+        const description = pollOptions.map((opt, i) => `${emojis[i]} **${opt.name}**`).join('\n\n');
+
+        const embed = new EmbedBuilder()
+            .setColor('#3498DB')
+            .setTitle(`📊 نظرسنجی: ${question}`)
+            .setDescription(description + `\n\n⏱️ پایان: <t:${Math.floor(endTime / 1000)}:R>`)
+            .setFooter({ text: `ایجاد شده توسط ${interaction.user.tag}` })
+            .setTimestamp();
+
+        // ساخت دکمه‌های رأی‌گیری
+        const row = new ActionRowBuilder();
+        pollOptions.forEach((opt, index) => {
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`poll_vote_${index}`)
+                    .setEmoji(opt.emoji)
+                    .setStyle(ButtonStyle.Secondary)
+            );
+        });
+
+        try {
+            const msg = await channel.send({ embeds: [embed], components: [row] });
+            
+            // ذخیره در دیتابیس
+            db.polls.set(msg.id, {
+                channelId: channel.id,
+                messageId: msg.id,
+                question: question,
+                options: pollOptions,
+                endTime: endTime,
+                ended: false,
+                voters: {} 
+            });
+
+            await InteractionUtils.sendSuccess(interaction, `نظرسنجی با موفقیت در ${channel} ایجاد شد.`);
+            
+            // فعال‌سازی تایمر چک کردن نظرسنجی‌ها
+            utils.checkPolls(); 
+
+        } catch (error) {
+            console.error(error);
+            await InteractionUtils.sendError(interaction, 'خطا در ارسال نظرسنجی.', true);
+        }
+        return;
+    }
+
+    // --- /send_account ---
+    if (interaction.commandName === 'send_account') {
+        // بررسی دسترسی ادمین
+        if (!interaction.member.permissions.has('Administrator')) {
+            return await InteractionUtils.sendError(interaction, 'شما دسترسی لازم برای ارسال اطلاعات اکانت را ندارید.');
+        }
+
+        const mail = interaction.options.getString('mail');
+        const recovery = interaction.options.getString('recovery_code');
+        const accNum = interaction.options.getString('account_num');
+        const user = interaction.options.getString('username') || 'N/A';
+        const pass = interaction.options.getString('password') || 'N/A';
+
+        const embed = new EmbedBuilder()
+            .setColor('Green')
+            .setTitle('🛍️ اطلاعات اکانت خریداری شده')
+            .addFields(
+                { name: '📧 ایمیل', value: `\`${mail}\``, inline: true },
+                { name: '🔑 کد بازیابی', value: `\`${recovery}\``, inline: true },
+                { name: '🔢 شماره اکانت', value: `\`${accNum}\``, inline: true },
+                { name: '👤 نام کاربری', value: `\`${user}\``, inline: true },
+                { name: '🔒 رمز عبور', value: `\`||${pass}||\``, inline: true }
+            )
+            .setFooter({ text: 'از خرید شما متشکریم!' })
+            .setTimestamp();
+
+        // ارسال پیام (معمولاً در تیکت استفاده می‌شود)
+        await interaction.reply({ embeds: [embed] });
+        return;
+    }
+
     // --- /serverinfo ---
     if (interaction.commandName === 'serverinfo') {
         await interaction.deferReply();
@@ -1275,7 +1373,7 @@ async function handleSlashCommand(interaction) {
         }
 
         // Get cards from database
-        const cards = db.get('bank_cards') || [];
+        const cards = db.cards.get('all_cards') || [];
         
         if (cards.length === 0) {
             const embed = new EmbedBuilder()
@@ -1284,7 +1382,7 @@ async function handleSlashCommand(interaction) {
                 .setDescription('No cards found in the database.')
                 .setTimestamp();
             
-            return await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
+            return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         }
 
         const embed = new EmbedBuilder()
@@ -1303,7 +1401,7 @@ async function handleSlashCommand(interaction) {
             });
         });
 
-        await safeReply(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -1325,7 +1423,7 @@ async function handleSlashCommand(interaction) {
         }
 
         // Get cards from database
-        const cards = db.get('bank_cards') || [];
+        const cards = db.cards.get('all_cards') || [];
         
         if (cards.length === 0) {
             return await InteractionUtils.sendError(interaction, 'No cards available in the database.');
@@ -1335,7 +1433,7 @@ async function handleSlashCommand(interaction) {
         const card = cards[0];
         
         // Remove card from database
-        db.set('bank_cards', cards.slice(1));
+        db.cards.set('all_cards', cards.slice(1));
 
         // Send card to user/channel
         try {
@@ -1393,7 +1491,7 @@ async function handleSlashCommand(interaction) {
 
         } catch (error) {
             // Put card back if sending failed
-            db.set('bank_cards', cards);
+            db.cards.set('all_cards', cards);
             await InteractionUtils.sendError(interaction, `Failed to send card: ${error.message}`);
         }
 
@@ -1415,10 +1513,10 @@ async function handleSlashCommand(interaction) {
 
         try {
             // Add to support ban list in database
-            const supportBans = db.get('support_bans') || [];
+            const supportBans = db.support.get('bans') || [];
             if (!supportBans.includes(user.id)) {
                 supportBans.push(user.id);
-                db.set('support_bans', supportBans);
+                db.support.set('bans', supportBans);
             }
 
             const embed = new EmbedBuilder()
@@ -1457,9 +1555,9 @@ async function handleSlashCommand(interaction) {
 
         try {
             // Get all ban data
-            const supportBans = db.get('support_bans') || [];
-            const banHistory = db.get('ban_history') || {};
-            const appeals = db.get('support_appeals') || {};
+            const supportBans = db.support.get('bans') || [];
+            const banHistory = db.moderation.get('history') || {};
+            const appeals = db.support.get('appeals') || {};
 
             // Calculate statistics
             const activeBans = supportBans.filter(ban => ban.status === 'active');
@@ -1612,6 +1710,91 @@ async function handleSlashCommand(interaction) {
         await interaction.showModal(modal);
         return;
     }
+
+    // --- /poll ---
+if (interaction.commandName === 'poll') {
+    // بررسی دسترسی
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+        return await InteractionUtils.sendError(interaction, 'شما دسترسی لازم برای ایجاد نظرسنجی را ندارید.');
+    }
+
+    const question = interaction.options.getString('question');
+    const optionsString = interaction.options.getString('options');
+    const durationStr = interaction.options.getString('duration');
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+
+    // پردازش گزینه‌ها
+    const optionsList = optionsString.split('|').map(opt => opt.trim()).filter(opt => opt.length > 0);
+    
+    if (optionsList.length < 2) {
+        return await InteractionUtils.sendError(interaction, 'لطفا حداقل ۲ گزینه وارد کنید (با | جدا کنید).', true);
+    }
+    if (optionsList.length > 5) {
+        return await InteractionUtils.sendError(interaction, 'حداکثر ۵ گزینه مجاز است.', true);
+    }
+
+    // پردازش زمان
+    const ms = utils.ms(durationStr);
+    if (!ms || ms < 60000) { // حداقل 1 دقیقه
+        return await InteractionUtils.sendError(interaction, 'فرمت زمان نامعتبر است یا کمتر از ۱ دقیقه است. (مثال: 1h)', true);
+    }
+
+    const endTime = Date.now() + ms;
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+
+    // ساخت گزینه‌ها برای دیتابیس و نمایش
+    const pollOptions = optionsList.map((opt, index) => ({
+        name: opt,
+        votes: 0,
+        emoji: emojis[index]
+    }));
+
+    // ساخت متن امبد
+    const description = pollOptions.map((opt, i) => `${emojis[i]} **${opt.name}**`).join('\n\n');
+
+    const embed = new EmbedBuilder()
+        .setColor('#3498DB')
+        .setTitle(`📊 نظرسنجی: ${question}`)
+        .setDescription(description + `\n\n⏱️ پایان: <t:${Math.floor(endTime / 1000)}:R>`)
+        .setFooter({ text: `ایجاد شده توسط ${interaction.user.tag}` })
+        .setTimestamp();
+
+    // ساخت دکمه‌ها
+    const row = new ActionRowBuilder();
+    pollOptions.forEach((opt, index) => {
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`poll_vote_${index}`)
+                .setEmoji(opt.emoji)
+                .setStyle(ButtonStyle.Secondary)
+        );
+    });
+
+    try {
+        const msg = await channel.send({ embeds: [embed], components: [row] });
+        
+        // ذخیره در دیتابیس
+        db.polls.set(msg.id, {
+            channelId: channel.id,
+            messageId: msg.id,
+            question: question,
+            options: pollOptions,
+            endTime: endTime,
+            ended: false,
+            voters: {} // برای جلوگیری از رای تکراری: { userId: optionIndex }
+        });
+
+        await InteractionUtils.sendSuccess(interaction, `نظرسنجی با موفقیت در ${channel} ایجاد شد.`);
+        
+        // اطمینان از اینکه تایمر چک کردن نظرسنجی‌ها فعال است
+        utils.checkPolls(); 
+
+    } catch (error) {
+        console.error(error);
+        await InteractionUtils.sendError(interaction, 'خطا در ارسال نظرسنجی.', true);
+    }
+}
+
 }
 
 async function handleTextCommand(message, commandName, args) {
