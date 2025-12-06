@@ -642,14 +642,14 @@ async function handleSlashCommand(interaction) {
             return await InteractionUtils.sendError(interaction, 'Selected channel must be a text channel.');
         }
 
-        const ticketConfig = config.ticketSystem;
-        const embed = new EmbedBuilder()
-            .setColor(config.colors.primary || '#5865F2')
-            .setTitle(ticketConfig.menu.title)
-            .setDescription(ticketConfig.menu.description)
-            .setThumbnail(config.shop?.logo || null)
-            .setFooter({ text: 'تیم پشتیبانی', iconURL: config.shop?.logo || interaction.guild.iconURL({ dynamic: true }) })
-            .setTimestamp();
+    const ticketConfig = config.ticketSystem;
+    const embed = new EmbedBuilder()
+        .setColor(config.colors.primary || '#5865F2')
+        .setTitle(ticketConfig.menu.title)
+        .setDescription(ticketConfig.menu.description)
+        .setImage(interaction.guild.iconURL({ dynamic: true, size: 512 }))
+        .setFooter({ text: 'تیم پشتیبانی', iconURL: config.shop?.logo || interaction.guild.iconURL({ dynamic: true }) })
+        .setTimestamp();
 
         const menu = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
