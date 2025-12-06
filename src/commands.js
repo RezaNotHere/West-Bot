@@ -647,7 +647,7 @@ async function handleSlashCommand(interaction) {
         .setColor(config.colors.primary || '#5865F2')
         .setTitle(ticketConfig.menu.title)
         .setDescription(ticketConfig.menu.description)
-        .setImage(interaction.guild.iconURL({ dynamic: true, size: 512 }))
+        .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 256 }))
         .setFooter({ text: 'تیم پشتیبانی', iconURL: config.shop?.logo || interaction.guild.iconURL({ dynamic: true }) })
         .setTimestamp();
 
