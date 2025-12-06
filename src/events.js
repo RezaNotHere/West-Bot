@@ -3,8 +3,8 @@ const { EmbedBuilder } = require('discord.js');
 const db = require('./database');
 const utils = require('./utils');
 const config = require('../configManager');
-const spamDetection = require('./spamDetection'); // اضافه شد
-const commands = require('./commands'); // اضافه شد
+//const spamDetection = require('./spamDetection');
+const commands = require('./commands'); 
 
 // متغیرهای داخلی
 let logger = null;
@@ -12,28 +12,20 @@ let security = null;
 
 // توابع تنظیم کننده (Setter)
 const setLogger = (l) => { logger = l; }
-const setSecurity = (s) => { security = s; } // اضافه شد
+const setSecurity = (s) => {
+    security = s;
+    // 🔧 FIX: Pass logger to security manager if it exists
+    if (logger && security.setLogger) {
+        security.setLogger(logger);
+    }
+} // اضافه شد
 
 async function onMessageCreate(message, client) {
     // نادیده گرفتن پیام‌های خود ربات
     if (message.author.bot) return;
     
     try {
-        // ۱. تشخیص اسپم (Spam Detection)
-        const isSpamming = await spamDetection.isSpam(message);
-        if (isSpamming) {
-            await message.delete().catch(() => {});
-            
-            // لاگ کردن اسپم
-            if (logger) {
-                await logger.logInfo('Spam Detected', {
-                    User: `${message.author.tag} (${message.author.id})`,
-                    Channel: `${message.channel.name} (${message.channel.id})`,
-                    MessageCount: spamDetection.getMessageCount(message.author.id)
-                });
-            }
-            return; // توقف پردازش
-        }
+        
         
         // ۲. فیلتر کلمات بد (Bad Words)
         if (utils.isBadWord(message.content)) {
@@ -234,15 +226,22 @@ async function onGuildBanAdd(ban, client, env) {
 
     const embed = new EmbedBuilder()
         .setColor('Red')
-        .setTitle('You have been banned')
-        .setDescription('You have been banned from the server for violating our community guidelines. If you believe this was a mistake, please contact server administration for more details.')
-        .setFooter({ text: `Server Invite: ${inviteUrl}` })
+        .setTitle('⛔ شما از سرور بن شدید')
+        .setDescription('شما بن شدید. اگر فکر می‌کنید اشتباه بن شده‌اید، می‌توانید درخواست آن‌بن دهید.')
+        .setFooter({ text: `لینک دعوت موقت (پس از آن‌بن قابل استفاده): ${inviteUrl}` })
         .setTimestamp();
+
+    const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`request_unban_${user.id}`)
+            .setLabel('درخواست انبن')
+            .setStyle(ButtonStyle.Primary)
+    );
 
     try {
         await user.send({
-            content: 'You have been banned from the server.',
-            embeds: [embed]
+            embeds: [embed],
+            components: [actionRow]
         });
     } catch (dmError) {
         console.error('Failed to send DM to banned user:', dmError);

@@ -1,4 +1,4 @@
-# 🤖 Advanced Discord Bot - West Bot v3.0.0
+# 🤖 Advanced Discord Bot - West Bot v3.0.1
 
 <div align="center">
 
@@ -6,13 +6,31 @@
 ![Node.js](https://img.shields.io/badge/Node.js-v16+-green?logo=node.js&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
-![Version](https://img.shields.io/badge/Version-3.0.0-blue)
+![Version](https://img.shields.io/badge/Version-3.0.1-blue)
 
 **A professional, feature-rich Discord bot with advanced auto-moderation, 3-strike warning system, and comprehensive server management.**
 
 [English](#english) • [فارسی](#فارسی)
 
 </div>
+
+---
+
+## 🚀 What's New in v3.0.1
+
+### ✅ Help Command Stability & UX
+- Fixed `/help` handler scope so it always responds
+- Ephemeral guide with interactive menu and quick links (README/SETUP/Issues)
+- Help sections: moderation overview, bot settings, admin utilities, security best practices
+
+### 📊 Polls Command
+- Added `/poll` with `question`, `options` (pipe-separated), `duration`, optional `channel`
+- Interactive vote buttons with emojis and end-time display
+- Persistent poll storage and duplicate vote prevention
+
+### 🔧 Internal Improvements
+- Safer command processing and clearer error messaging for help flow
+- Command registration refreshed to include `/help`
 
 ---
 
@@ -57,13 +75,14 @@
 
 ### Overview
 
-**West Bot v3.0.0** is a comprehensive Discord bot engineered for professional communities with advanced auto-moderation capabilities:
+**West Bot v3.0.1** is a comprehensive Discord bot engineered for professional communities with advanced auto-moderation capabilities:
 
 ✨ **Advanced Auto-Moderation** - 3-strike warning system with auto-ban and smart permission handling  
 🚫 **Bad Words Filter** - Database-driven detection with real-time updates and bulk import  
 🎫 **Professional Ticket System** - Streamlined support, purchases, and inquiries management  
 🎁 **Giveaway Management** - Automated giveaway hosting with real-time participant tracking  
 📊 **Detailed Analytics** - Invite tracking, role statistics, and member insights  
+🆘 **Interactive Help** - `/help` command with guided sections and quick links  
 🎮 **Minecraft Integration** - Beautiful profile rendering with Hypixel statistics  
 🔐 **Enterprise Security** - AES-256-GCM encrypted database with anti-spam protection  
 📝 **Professional Logging** - Comprehensive audit trails and error reporting  
@@ -164,6 +183,15 @@ node index.js
 - **User Info**: `/userinfo` - Comprehensive user profiles
 
 ### 🎮 Minecraft Integration
+
+### 📊 Polls
+- **Create Polls**: Interactive voting with buttons and emojis
+- **Configurable Duration**: Human-readable time (`1h`, `30m`, `2d`)
+- **Persistent Storage**: Polls tracked to prevent duplicate votes
+
+### 🆘 Help Guide
+- **Interactive Menu**: `/help` shows a multi-section guide
+- **Direct Links**: Quick access to README, SETUP, and Issues
 - **Profile Rendering**: Beautiful profile images with capes and skins
 - **Hypixel Stats**: Detailed game statistics and rankings
 - **Name History**: Track username changes
@@ -293,6 +321,18 @@ node index.js
 | `/userinfo` | `/userinfo [user]` | - | User profile info |
 
 ### 🎮 Minecraft Commands
+
+### 📊 Poll Commands
+
+| Command | Usage | Permission | Description |
+|---|---|---|---|
+| `/poll` | `/poll question:"..." options:"A|B|C" duration:"1h" [channel]` | Manage Messages | Create interactive poll |
+
+### 🆘 Help Command
+
+| Command | Usage | Permission | Description |
+|---|---|---|---|
+| `/help` | `/help` | - | Interactive guide with sections and links |
 
 | Command | Usage | Permission | Description |
 |---|---|---|---|
@@ -518,8 +558,13 @@ All ticket messages, buttons, and categories are fully customizable in `config.j
 
 ### 🌍 راهنمای فارسی
 
-#### معرفی v3.0.0
-**West Bot v3.0.0** یک ربات دیسکورد حرفه‌ای با سیستم خودکار مدیریتی پیشرفته است:
+#### معرفی v3.0.1
+**West Bot v3.0.1** یک ربات دیسکورد حرفه‌ای با سیستم خودکار مدیریتی پیشرفته است:
+
+#### ویژگی‌های جدید v3.0.1
+- ✅ **رفع مشکل دستور /help**: نمایش منوی راهنما و لینک‌های سریع به صورت اپهمرال
+- 📊 **افزودن دستور نظرسنجی**: `/poll` با گزینه‌های جداشده با `|` و مدت‌زمان قابل تنظیم
+- 🔧 **بهبود داخلی**: هندلرها و لاگ‌ها پایدارتر و خواناتر
 
 #### ویژگی‌های جدید v3.0.0
 - ⚠️ **سیستم 3 اخطاری**: هشدار خودکار با بن بعد از 3 اخطار
@@ -545,7 +590,7 @@ cp config.example.json config.json
 node index.js
 ```
 
-#### دستورات اصلی v3.0.0
+#### دستورات اصلی v3.0.1
 - **مدیریت کلمات بد**: `/addbadword`, `/removebadword`, `/listbadwords`, `/importbadwords`
 - **سیستم اخطار**: `/warn`, `/clearwarnings`
 - **مدیریت**: `/kick`, `/ban`, `/clear`
@@ -553,6 +598,8 @@ node index.js
 - **گیووی**: `/start-giveaway`, `/end-giveaway`
 - **آمار**: `/invites`, `/rolestats`, `/serverinfo`
 - **ماینکرفت**: `/mcinfo`
+- **نظرسنجی**: `/poll`
+- **راهنما**: `/help`
 
 #### سیستم خودکار مدیریتی
 1. **کاربر فوش می‌دهد**: پیام حذف می‌شود
@@ -586,4 +633,4 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ for Discord communities - Advanced Auto-Moderation Edition v3.0.0**
+**Made with ❤️ for Discord communities - Advanced Auto-Moderation Edition v3.0.1**

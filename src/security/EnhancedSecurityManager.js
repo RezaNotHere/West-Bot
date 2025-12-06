@@ -1,10 +1,11 @@
+// src/security/EnhancedSecurityManager.js
 /**
  * Enhanced Security Manager with Advanced Protection
  * Integrates all security systems with comprehensive logging
  */
 
 const EnhancedRateLimiter = require('./EnhancedRateLimiter');
-const EnhancedAntiSpam = require('./AntiSpam'); // Use existing file
+const EnhancedAntiSpam = require('./EnhancedAntiSpam');
 const InputValidator = require('./InputValidator');
 
 class EnhancedSecurityManager {
@@ -30,6 +31,7 @@ class EnhancedSecurityManager {
         
         // Admin system
         this.adminIds = new Set(options.adminIds || []);
+         this.logger = null; // Logger reference
         
         // Security event logging
         this.securityLog = [];
@@ -52,20 +54,68 @@ class EnhancedSecurityManager {
             enableRateLimiting: true,
             enableAntiSpam: true,
             enableBlacklist: true,
-            logSecurityEvents: false, // Disabled to reduce log spam
-            autoBanThreshold: 10, // Auto-ban after 10 violations
-            quarantineMode: false, // Enable during attacks
-            emergencyMode: false  // Enable during severe attacks
+            logSecurityEvents: true,
+            autoBanThreshold: 10,
+            quarantineMode: false,
+            emergencyMode: false
         };
         
         // Emergency mode settings
         this.emergencySettings = {
-            rateLimitMultiplier: 0.1, // 90% reduction
-            antiSpamSensitivity: 2,    // Double sensitivity
-            requireAdminApproval: true  // Only admins can use commands
+            rateLimitMultiplier: 0.1,
+            antiSpamSensitivity: 2,
+            requireAdminApproval: true
         };
         
         console.log('[EnhancedSecurityManager] Initialized with advanced protection systems');
+    }
+
+    /**
+     * ✅ NEW METHOD: Check message security
+     * This was missing and caused the crash
+     */
+    async checkMessage(message) {
+        // Ignore bots
+        if (message.author.bot) return { allowed: true };
+
+        const userId = message.author.id;
+        const guildId = message.guild?.id;
+
+        // Check Emergency Mode
+        if (this.config.emergencyMode) {
+             if (!this.isAdmin(userId)) {
+                 return { allowed: false, reason: 'EMERGENCY_MODE' };
+             }
+        }
+
+        // Check Whitelist
+        if (this.isWhitelisted(userId, guildId)) {
+            return { allowed: true, reason: 'WHITELISTED' };
+        }
+
+        // Check Blacklist
+        if (this.config.enableBlacklist) {
+            const blacklistCheck = this.checkBlacklist(userId, guildId);
+            if (!blacklistCheck.allowed) return blacklistCheck;
+        }
+
+        // Check AntiSpam
+        if (this.config.enableAntiSpam) {
+            // Assumes EnhancedAntiSpam handles checkMessage similar to standard AntiSpam
+            const spamCheck = await this.antiSpam.checkMessage(message);
+            if (spamCheck.isSpam) {
+                this.stats.spamDetected++;
+                this.logSecurityEvent('SPAM_DETECTED', userId, 'MESSAGE', spamCheck.reason);
+                return {
+                    allowed: false,
+                    reason: spamCheck.reason,
+                    message: 'Message flagged as spam',
+                    action: spamCheck.action
+                };
+            }
+        }
+
+        return { allowed: true };
     }
 
     /**
@@ -75,7 +125,6 @@ class EnhancedSecurityManager {
         const userId = interaction.user.id;
         const guildId = interaction.guild?.id;
         const commandName = interaction.commandName;
-        const now = Date.now();
         
         this.stats.totalRequests++;
         
@@ -123,23 +172,6 @@ class EnhancedSecurityManager {
             }
         }
         
-        // Additional checks for messages
-        if (interaction.type === 0) { // Message
-            if (this.config.enableAntiSpam) {
-                const spamCheck = await this.antiSpam.checkMessage(interaction);
-                if (spamCheck.isSpam) {
-                    this.stats.spamDetected++;
-                    this.logSecurityEvent('SPAM_DETECTED', userId, null, spamCheck.reason);
-                    return {
-                        allowed: false,
-                        reason: 'spam_detected',
-                        message: 'Message flagged as spam',
-                        details: spamCheck
-                    };
-                }
-            }
-        }
-        
         return { allowed: true };
     }
 
@@ -149,7 +181,7 @@ class EnhancedSecurityManager {
     validateInteractionInput(interaction) {
         const commandName = interaction.commandName;
         
-        // Define validation rules for each command
+        // Define validation rules
         const validationRules = {
             'mcinfo': {
                 username: { type: 'minecraftUsername', required: true }
@@ -173,12 +205,10 @@ class EnhancedSecurityManager {
         const inputs = {};
         const errors = [];
         
-        // Collect inputs from interaction
         Object.entries(rules).forEach(([field, rule]) => {
             if (rule.required) {
-                const value = interaction.options.getString(field) || 
-                             interaction.options.getInteger(field) || 
-                             interaction.options.getUser(field)?.id;
+                const option = interaction.options.get(field);
+                const value = option ? option.value : undefined;
                 
                 if (value === undefined) {
                     errors.push(`Missing required field: ${field}`);
@@ -189,7 +219,6 @@ class EnhancedSecurityManager {
             }
         });
         
-        // Validate inputs
         if (Object.keys(inputs).length > 0) {
             const validation = this.inputValidator.validateMultiple(inputs);
             
@@ -246,7 +275,6 @@ class EnhancedSecurityManager {
     checkEmergencyMode(interaction) {
         if (!this.config.emergencyMode) return { allowed: true };
         
-        // Only admins can use commands in emergency mode
         if (!this.isAdmin(interaction.user.id)) {
             return {
                 allowed: false,
@@ -269,86 +297,61 @@ class EnhancedSecurityManager {
      * Check if user/guild is whitelisted
      */
     isWhitelisted(userId, guildId) {
-        return this.whitelist.users.has(userId) || 
+        return this.whitelist.users.has(userId) ||
                (guildId && this.whitelist.guilds.has(guildId));
     }
 
     /**
-     * Add to blacklist
+     * Set logger instance
      */
+    setLogger(logger) {
+        this.logger = logger;
+    }
+
     addToBlacklist(type, id, reason = 'No reason provided') {
         if (!this.blacklist[type]) return false;
-        
         this.blacklist[type].add(id);
         this.logSecurityEvent('BLACKLIST_ADD', 'SYSTEM', null, `Added ${type}: ${id} - ${reason}`);
-        
         return true;
     }
 
-    /**
-     * Remove from blacklist
-     */
     removeFromBlacklist(type, id) {
         if (!this.blacklist[type]) return false;
-        
         this.blacklist[type].delete(id);
         this.logSecurityEvent('BLACKLIST_REMOVE', 'SYSTEM', null, `Removed ${type}: ${id}`);
-        
         return true;
     }
 
-    /**
-     * Add to whitelist
-     */
     addToWhitelist(type, id) {
         if (!this.whitelist[type]) return false;
-        
         this.whitelist[type].add(id);
         this.logSecurityEvent('WHITELIST_ADD', 'SYSTEM', null, `Added ${type}: ${id}`);
-        
         return true;
     }
 
-    /**
-     * Remove from whitelist
-     */
     removeFromWhitelist(type, id) {
         if (!this.whitelist[type]) return false;
-        
         this.whitelist[type].delete(id);
         this.logSecurityEvent('WHITELIST_REMOVE', 'SYSTEM', null, `Removed ${type}: ${id}`);
-        
         return true;
     }
 
-    /**
-     * Toggle emergency mode
-     */
     toggleEmergencyMode(enabled, reason = 'Manual activation') {
         this.config.emergencyMode = enabled;
         this.logSecurityEvent('EMERGENCY_MODE', 'SYSTEM', null, `${enabled ? 'ENABLED' : 'DISABLED'} - ${reason}`);
-        
         if (enabled) {
-            // Apply emergency settings
-            // This would modify the rate limiter and anti-spam settings
             console.warn('[SecurityManager] EMERGENCY MODE ACTIVATED - All systems on high alert');
         } else {
             console.log('[SecurityManager] Emergency mode deactivated');
         }
     }
 
-    /**
-     * Reset user data
-     */
     resetUser(userId) {
         this.rateLimiter.resetUser(userId);
         this.antiSpam.resetUser(userId);
         this.logSecurityEvent('USER_RESET', 'SYSTEM', null, `Reset data for user: ${userId}`);
     }
 
-    /**
-     * Get comprehensive statistics
-     */
     getStats() {
         const uptime = Date.now() - this.stats.startTime;
         const requestsPerMinute = (this.stats.totalRequests / (uptime / 60000)).toFixed(2);
@@ -374,9 +377,6 @@ class EnhancedSecurityManager {
         };
     }
 
-    /**
-     * Log security event
-     */
     logSecurityEvent(type, userId, commandName, details) {
         const event = {
             type,
@@ -385,91 +385,26 @@ class EnhancedSecurityManager {
             details,
             timestamp: Date.now()
         };
-        
         this.securityLog.push(event);
-        
-        // Keep log size manageable
         if (this.securityLog.length > this.maxLogSize) {
             this.securityLog = this.securityLog.slice(-this.maxLogSize);
         }
-        
-        // Log to console if enabled
         if (this.config.logSecurityEvents) {
             console.warn(`[SECURITY] ${type}: ${details}`, { userId, commandName });
         }
+
+        // Use logger if available
+        if (this.logger) {
+            const severity = type.includes('DETECTED') || type.includes('BLOCK') ? 'high' : 'medium';
+            this.logger.logSecurity(type, details, {
+                User: userId,
+                Command: commandName || 'N/A'
+            }, severity);
+        }
     }
 
-    /**
-     * Get recent security events
-     */
     getRecentEvents(limit = 50) {
         return this.securityLog.slice(-limit);
-    }
-
-    /**
-     * Get security report
-     */
-    getSecurityReport() {
-        const now = Date.now();
-        const last24h = now - (24 * 60 * 60 * 1000);
-        
-        const recentEvents = this.securityLog.filter(event => event.timestamp > last24h);
-        const eventsByType = {};
-        
-        recentEvents.forEach(event => {
-            eventsByType[event.type] = (eventsByType[event.type] || 0) + 1;
-        });
-        
-        return {
-            period: 'Last 24 hours',
-            totalEvents: recentEvents.length,
-            eventsByType,
-            topViolators: this.getTopViolators(recentEvents),
-            recommendations: this.generateRecommendations(eventsByType)
-        };
-    }
-
-    /**
-     * Get top violators
-     */
-    getTopViolators(events) {
-        const violators = {};
-        
-        events.forEach(event => {
-            if (event.userId && event.userId !== 'SYSTEM') {
-                violators[event.userId] = (violators[event.userId] || 0) + 1;
-            }
-        });
-        
-        return Object.entries(violators)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 10)
-            .map(([userId, count]) => ({ userId, violations: count }));
-    }
-
-    /**
-     * Generate security recommendations
-     */
-    generateRecommendations(eventsByType) {
-        const recommendations = [];
-        
-        if (eventsByType.RATE_LIMIT > 10) {
-            recommendations.push('Consider tightening rate limits');
-        }
-        
-        if (eventsByType.SPAM_DETECTED > 5) {
-            recommendations.push('Increase anti-spam sensitivity');
-        }
-        
-        if (eventsByType.INPUT_VALIDATION > 3) {
-            recommendations.push('Review input validation rules');
-        }
-        
-        if (eventsByType.BLACKLIST_USER > 0) {
-            recommendations.push('Monitor blacklisted user activity');
-        }
-        
-        return recommendations;
     }
 }
 

@@ -9,7 +9,9 @@ const {
     TextInputBuilder, 
     TextInputStyle,
     ActionRowBuilder,
-    MessageFlags
+    MessageFlags,
+    PermissionsBitField
+
 } = require('discord.js');
 
 const { db } = require('./database');
@@ -1303,21 +1305,21 @@ async function handleSlashCommand(interaction) {
     }
 
     // --- /add_card ---
-    if (interaction.commandName === 'add_card') {
+if (interaction.commandName === 'add_card') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to add cards.');
         }
 
         const modal = new ModalBuilder()
             .setCustomId('add_card_modal')
-            .setTitle('Add Bank Card')
+            .setTitle('افزودن کارت بانکی')
             .addComponents(
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder()
                         .setCustomId('card_number')
-                        .setLabel('Card Number')
+                        .setLabel('شماره کارت')
                         .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('Enter 16-digit card number')
+                        .setPlaceholder('شماره کارت ۱۶ رقمی')
                         .setRequired(true)
                         .setMaxLength(16)
                         .setMinLength(16)
@@ -1325,40 +1327,20 @@ async function handleSlashCommand(interaction) {
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder()
                         .setCustomId('card_holder')
-                        .setLabel('Card Holder Name')
+                        .setLabel('نام صاحب کارت')
                         .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('Enter card holder name')
+                        .setPlaceholder('نام و نام خانوادگی')
                         .setRequired(true)
                         .setMaxLength(50)
                 ),
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder()
-                        .setCustomId('expiry_date')
-                        .setLabel('Expiry Date (MM/YY)')
+                        .setCustomId('bank_name')
+                        .setLabel('نام بانک')
                         .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('MM/YY')
+                        .setPlaceholder('مثال: بانک ملت')
                         .setRequired(true)
-                        .setMaxLength(5)
-                        .setMinLength(5)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('cvv')
-                        .setLabel('CVV')
-                        .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('Enter 3-digit CVV')
-                        .setRequired(true)
-                        .setMaxLength(3)
-                        .setMinLength(3)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('card_type')
-                        .setLabel('Card Type (visa/mastercard/etc)')
-                        .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('visa')
-                        .setRequired(true)
-                        .setMaxLength(20)
+                        .setMaxLength(30)
                 )
             );
 
@@ -1367,19 +1349,18 @@ async function handleSlashCommand(interaction) {
     }
 
     // --- /list_cards ---
-    if (interaction.commandName === 'list_cards') {
+ if (interaction.commandName === 'list_cards') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to view cards.');
         }
 
-        // Get cards from database
         const cards = db.cards.get('all_cards') || [];
         
         if (cards.length === 0) {
             const embed = new EmbedBuilder()
                 .setColor('Yellow')
-                .setTitle('💳 Bank Cards')
-                .setDescription('No cards found in the database.')
+                .setTitle('💳 کارت‌های بانکی')
+                .setDescription('هیچ کارتی در دیتابیس موجود نیست.')
                 .setTimestamp();
             
             return await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -1387,16 +1368,14 @@ async function handleSlashCommand(interaction) {
 
         const embed = new EmbedBuilder()
             .setColor('Blue')
-            .setTitle('💳 Bank Cards')
-            .setDescription(`Found ${cards.length} card(s) in the database.`)
+            .setTitle(`💳 لیست کارت‌های بانکی (${cards.length} عدد)`)
             .setTimestamp();
 
-        // Add cards as fields (mask sensitive info)
         cards.forEach((card, index) => {
-            const maskedNumber = `****-****-****-${card.card_number.slice(-4)}`;
+            const maskedNumber = `${card.card_number.slice(0, 4)}-****-****-${card.card_number.slice(-4)}`;
             embed.addFields({
-                name: `Card #${index + 1} - ${card.card_type.toUpperCase()}`,
-                value: `**Holder:** ${card.card_holder}\n**Number:** ${maskedNumber}\n**Expiry:** ${card.expiry_date}\n**Added:** <t:${Math.floor(card.added_at / 1000)}:R>`,
+                name: `کارت #${index + 1} - ${card.bank_name}`,
+                value: `**صاحب کارت:** ${card.card_holder}\n**شماره:** ${maskedNumber}\n**ثبت:** <t:${Math.floor(card.added_at / 1000)}:R>`,
                 inline: false
             });
         });
@@ -1405,8 +1384,7 @@ async function handleSlashCommand(interaction) {
         return;
     }
 
-    // --- /send_card ---
-    if (interaction.commandName === 'send_card') {
+ if (interaction.commandName === 'send_card') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return await InteractionUtils.sendError(interaction, 'You do not have permission to send cards.');
         }
@@ -1415,64 +1393,58 @@ async function handleSlashCommand(interaction) {
         const channel = interaction.options.getChannel('channel');
         
         if (!user && !channel) {
-            return await InteractionUtils.sendError(interaction, 'Please specify a user or channel to send the card to.');
+            return await InteractionUtils.sendError(interaction, 'لطفا کاربر یا کانال مقصد را انتخاب کنید.');
         }
 
         if (user && channel) {
-            return await InteractionUtils.sendError(interaction, 'Cannot specify both user and channel. Choose only one.');
+            return await InteractionUtils.sendError(interaction, 'فقط یکی از گزینه‌های کاربر یا کانال را انتخاب کنید.');
         }
 
-        // Get cards from database
         const cards = db.cards.get('all_cards') || [];
         
         if (cards.length === 0) {
-            return await InteractionUtils.sendError(interaction, 'No cards available in the database.');
+            return await InteractionUtils.sendError(interaction, 'هیچ کارتی در دیتابیس موجود نیست.');
         }
 
-        // Get the first available card
+        // برداشتن اولین کارت
         const card = cards[0];
         
-        // Remove card from database
+        // حذف کارت از دیتابیس
         db.cards.set('all_cards', cards.slice(1));
 
-        // Send card to user/channel
         try {
             const cardEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setTitle(' Your Bank Card Details')
-                .setDescription('Here are your card details. Please keep them secure!')
+                .setTitle('💳 اطلاعات کارت جهت واریز')
+                .setDescription('لطفاً مبلغ مورد نظر را به شماره کارت زیر واریز کنید.')
                 .addFields(
-                    { name: 'Card Type', value: card.card_type.toUpperCase(), inline: true },
-                    { name: 'Card Number', value: card.card_number, inline: true },
-                    { name: 'Card Holder', value: card.card_holder, inline: true },
-                    { name: 'Expiry Date', value: card.expiry_date, inline: true },
-                    { name: 'CVV', value: card.cvv, inline: true }
+                    { name: '🏦 نام بانک', value: card.bank_name, inline: true },
+                    { name: '👤 صاحب کارت', value: card.card_holder, inline: true },
+                    { name: '🔢 شماره کارت', value: `\`${card.card_number}\``, inline: false }
                 )
-                .setFooter({ text: 'This card has been removed from our database' })
+                .setFooter({ text: 'این کارت یک‌بار مصرف بود و از سیستم حذف شد.' })
                 .setTimestamp();
 
-            let target;
+            let targetName;
             let targetType;
 
             if (user) {
                 await user.send({ embeds: [cardEmbed] });
-                target = user.tag;
+                targetName = user.tag;
                 targetType = 'DM';
             } else if (channel) {
                 await channel.send({ embeds: [cardEmbed] });
-                target = `#${channel.name}`;
+                targetName = `#${channel.name}`;
                 targetType = 'Channel';
             }
 
             const confirmEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setTitle(' Card Sent Successfully')
-                .setDescription(`Card details have been sent to ${target}`)
+                .setTitle('✅ کارت ارسال شد')
+                .setDescription(`اطلاعات کارت با موفقیت برای ${targetName} ارسال شد.`)
                 .addFields(
-                    { name: 'Card Type', value: card.card_type.toUpperCase(), inline: true },
-                    { name: 'Last 4 Digits', value: card.card_number.slice(-4), inline: true },
-                    { name: 'Target Type', value: targetType, inline: true },
-                    { name: 'Remaining Cards', value: `${cards.length - 1}`, inline: true }
+                    { name: 'بانک', value: card.bank_name, inline: true },
+                    { name: 'باقیمانده کارت‌ها', value: `${cards.length - 1}`, inline: true }
                 )
                 .setTimestamp();
 
@@ -1480,24 +1452,21 @@ async function handleSlashCommand(interaction) {
 
             if (logger) {
                 await logger.logInfo('Card Sent', {
-                    Sender: `${interaction.user.tag} (${interaction.user.id})`,
-                    Target: target,
-                    TargetType: targetType,
-                    CardType: card.card_type,
-                    Last4Digits: card.card_number.slice(-4),
-                    RemainingCards: cards.length - 1
+                    Sender: `${interaction.user.tag}`,
+                    Target: targetName,
+                    Bank: card.bank_name,
+                    Remaining: cards.length - 1
                 });
             }
 
         } catch (error) {
-            // Put card back if sending failed
+            // برگرداندن کارت در صورت خطا
             db.cards.set('all_cards', cards);
-            await InteractionUtils.sendError(interaction, `Failed to send card: ${error.message}`);
+            await InteractionUtils.sendError(interaction, `خطا در ارسال کارت: ${error.message}`);
         }
 
         return;
     }
-
     // --- /bansupport ---
     if (interaction.commandName === 'bansupport') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
@@ -1512,12 +1481,25 @@ async function handleSlashCommand(interaction) {
         }
 
         try {
-            // Add to support ban list in database
+            // Add to support ban list in database (object-based)
             const supportBans = db.support.get('bans') || [];
-            if (!supportBans.includes(user.id)) {
-                supportBans.push(user.id);
-                db.support.set('bans', supportBans);
+            const existingIndex = supportBans.findIndex(b => b.user_id === user.id);
+            const banRecord = {
+                user_id: user.id,
+                user_tag: user.tag,
+                status: 'active',
+                duration: 'permanent',
+                banned_at: Date.now(),
+                expires_at: null,
+                reason: reason,
+                banned_by: `${interaction.user.tag} (${interaction.user.id})`
+            };
+            if (existingIndex === -1) {
+                supportBans.push(banRecord);
+            } else {
+                supportBans[existingIndex] = { ...supportBans[existingIndex], ...banRecord };
             }
+            db.support.set('bans', supportBans);
 
             const embed = new EmbedBuilder()
                 .setColor('Red')
@@ -1709,6 +1691,60 @@ async function handleSlashCommand(interaction) {
         }
         await interaction.showModal(modal);
         return;
+    }
+
+    // --- /help ---
+    if (interaction.commandName === 'help') {
+        try {
+            await InteractionUtils.deferReply(interaction, true);
+
+            const docs = {
+                readme: (config.docs && config.docs.readmeUrl) || 'https://github.com/RezaNotHere/West-Bot#readme',
+                setup: (config.docs && config.docs.setupUrl) || 'https://github.com/RezaNotHere/West-Bot/blob/main/SETUP.md',
+                issues: (config.docs && config.docs.issuesUrl) || 'https://github.com/RezaNotHere/West-Bot/issues'
+            };
+
+            const introEmbed = new EmbedBuilder()
+                .setColor('#2C3E50')
+                .setTitle('راهنمای کامل مدیریت بات')
+                .setDescription('برای دسترسی سریع، از منوی زیر بخش مورد نظر را انتخاب کنید.')
+                .addFields(
+                    { name: 'بخش‌ها', value: '• معرفی دستورات مدیریتی\n• راهنمای تنظیمات بات\n• دستورات کاربردی برای ادمین‌ها\n• نکات امنیتی و بهترین روش‌ها' },
+                    { name: 'نمونه‌های سریع', value: 'مثال‌ها:\n`/warn user:@User reason:"اسپم"`\n`/clear amount:50`\n`/start-giveaway channel:#announcements duration:1d winners:2 prize:"Nitro"`' }
+                )
+                .setFooter({ text: 'برای نمایش جزئیات هر بخش، از منوی انتخاب استفاده کنید' })
+                .setTimestamp();
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('help_menu')
+                .setPlaceholder('یک بخش را انتخاب کنید')
+                .addOptions(
+                    { label: 'معرفی دستورات مدیریتی', value: 'moderation_overview', emoji: '🛠️' },
+                    { label: 'راهنمای تنظیمات بات', value: 'bot_settings', emoji: '⚙️' },
+                    { label: 'دستورات کاربردی برای ادمین‌ها', value: 'admin_util', emoji: '🧰' },
+                    { label: 'نکات امنیتی و بهترین روش‌ها', value: 'security_best', emoji: '🛡️' }
+                );
+
+            const linksRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('README').setURL(docs.readme),
+                new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('SETUP').setURL(docs.setup),
+                new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Issues').setURL(docs.issues),
+                new ButtonBuilder().setCustomId('help_refresh').setStyle(ButtonStyle.Secondary).setLabel('Refresh')
+            );
+
+            const menuRow = new ActionRowBuilder().addComponents(menu);
+            const payload = { embeds: [introEmbed], components: [menuRow, linksRow] };
+
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply(payload);
+            } else {
+                await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+            }
+            return;
+        } catch (error) {
+            await InteractionUtils.sendError(interaction, 'خطا در اجرای دستور راهنما.', true);
+            return;
+        }
     }
 
     // --- /poll ---

@@ -440,12 +440,12 @@ class EnhancedAntiSpam {
                     // Silent error - no logging for mute failures
                 }
             }
-        } else if (this.config.warnUser && Math.random() < 0.2) { // Only warn 20% of time
+        } else if (this.config.warnUser) { // Always send warning DM
             // Send warning
             try {
                 await message.author.send(
-                    `⚠️ Warning: Your message was flagged as spam (${violation.reason}). ` +
-                    `Warning ${warningData.count}/${this.config.maxWarnings}`
+                    `⚠️ Warning: Your message was flagged as spam (${violation.reason}).
+                    Warning ${warningData.count}/${this.config.maxWarnings}`
                 );
             } catch (err) {
                 // Silent error - user has DMs disabled

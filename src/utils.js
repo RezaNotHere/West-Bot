@@ -695,15 +695,29 @@ async function ensureTicketCategory(guild, categoryName) {
     return category;
 }
 
+// در فایل src/utils.js این تابع را جایگزین کنید:
+
 async function createTicketChannel(guild, user, reason, additionalDetails = '') {
     const ticketConfig = config.ticketSystem;
     if (!ticketConfig) throw new Error('Ticket system configuration not found');
 
-    const TICKET_CATEGORY_ID = config.roles?.ticketAccess;
-    if (!TICKET_CATEGORY_ID) throw new Error('Ticket access role ID not configured');
+    // ۱. دریافت ID رول پشتیبانی (برای تنظیم دسترسی دیدن تیکت)
+    const SUPPORT_ROLE_ID = config.roles?.ticketAccess;
+    if (!SUPPORT_ROLE_ID) throw new Error('Ticket access role ID (config.roles.ticketAccess) not configured');
 
-    const category = guild.channels.cache.get(TICKET_CATEGORY_ID) || 
-                   await ensureTicketCategory(guild, ticketConfig.categoryName);
+    // ۲. پیدا کردن یا ساختن کتگوری (Category)
+    // اصلاح: دیگر سعی نمی‌کند با ID رول، کتگوری را پیدا کند.
+    let category;
+    
+    // اگر در کانفیگ ID کتگوری گذاشته باشید (اختیاری)
+    if (ticketConfig.categoryId) {
+        category = guild.channels.cache.get(ticketConfig.categoryId);
+    }
+    
+    // اگر کتگوری پیدا نشد، یکی جدید با نام مشخص شده میسازد یا پیدا می‌کند
+    if (!category) {
+        category = await ensureTicketCategory(guild, ticketConfig.categoryName);
+    }
 
     const ticketNumber = (guild.channels.cache.filter(ch => ch.name.startsWith('ticket-')).size) + 1;
     const channelName = ticketConfig.channelNameTemplate.replace('{username}', user.username).replace('{number}', ticketNumber);
@@ -713,20 +727,26 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
         type: 0, // GUILD_TEXT
         parent: category.id,
         permissionOverwrites: [
-            { id: guild.id, deny: ['ViewChannel'] }, 
-            { id: user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles', 'EmbedLinks'] }, 
-            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageMessages'] } 
+            { id: guild.id, deny: ['ViewChannel'] }, // همه ممبرها نبینند
+            { id: user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles', 'EmbedLinks'] }, // کاربر ببیند
+            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageMessages'] } // ربات ببیند
         ]
     });
 
-    if (TICKET_CATEGORY_ID && TICKET_CATEGORY_ID !== guild.id) {
-        await ticketChannel.permissionOverwrites.edit(TICKET_CATEGORY_ID, {
-            ViewChannel: true,
-            ReadMessageHistory: true,
-            SendMessages: false 
-        });
+    // ۳. دادن دسترسی به تیم پشتیبانی
+    if (SUPPORT_ROLE_ID && SUPPORT_ROLE_ID !== guild.id) {
+        try {
+            await ticketChannel.permissionOverwrites.edit(SUPPORT_ROLE_ID, {
+                ViewChannel: true,
+                ReadMessageHistory: true,
+                SendMessages: true // ✅ اصلاح شد: قبلاً false بود و ادمین نمی‌توانست تایپ کند!
+            });
+        } catch (error) {
+            console.error('Error setting permissions for support role:', error);
+        }
     }
 
+    // بقیه کدها مثل قبل...
     const finalReason = ticketConfig.menu.categories.find(cat => cat.value === reason)?.label || reason;
     
     const welcomeEmbed = new EmbedBuilder()
@@ -760,7 +780,7 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
         new ButtonBuilder().setCustomId('claim_ticket').setLabel(ticketConfig.buttons?.admin?.claimTicket?.label || '👋 Claim Ticket').setStyle(getButtonStyle(ticketConfig.buttons?.admin?.claimTicket?.style || 'Secondary'))
     );
 
-    const mentionText = `<@${user.id}> <@&${TICKET_CATEGORY_ID}>`;
+    const mentionText = `<@${user.id}> <@&${SUPPORT_ROLE_ID}>`;
 
     await ticketChannel.send({ 
         content: mentionText, 
@@ -768,7 +788,7 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
         components: [userButtons, adminButtons]
     });
 
-    // Store ticket information in database
+    // ذخیره اطلاعات تیکت در دیتابیس
     db.ticketInfo.set(ticketChannel.id, {
         ownerId: user.id,
         reason: finalReason,
@@ -1131,6 +1151,11 @@ async function registerCommands(clientId, guildId, token) {
         new SlashCommandBuilder()
             .setName('serverinfo')
             .setDescription('Show server info')
+            .toJSON()
+        ,
+        new SlashCommandBuilder()
+            .setName('help')
+            .setDescription('راهنمای کامل مدیریت و تنظیمات بات')
             .toJSON()
     );
 

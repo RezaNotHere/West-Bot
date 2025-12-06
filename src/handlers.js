@@ -1,4 +1,4 @@
-﻿// handlers.js
+// handlers.js
 const { db } = require('./database');
 const utils = require('./utils');
 const { logAction, createTicketChannel } = require('./utils');
@@ -27,6 +27,98 @@ if (interaction.customId.startsWith('poll_vote_')) {
         return await safeReply(interaction, { content: '❌ این نظرسنجی به پایان رسیده است.', flags: MessageFlags.Ephemeral });
     }
 
+    if (interaction.customId === 'help_refresh') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const docs = {
+            readme: (config.docs && config.docs.readmeUrl) || 'https://github.com/RezaNotHere/West-Bot#readme',
+            setup: (config.docs && config.docs.setupUrl) || 'https://github.com/RezaNotHere/West-Bot/blob/main/SETUP.md',
+            issues: (config.docs && config.docs.issuesUrl) || 'https://github.com/RezaNotHere/West-Bot/issues'
+        };
+        const introEmbed = new EmbedBuilder()
+            .setColor('#2C3E50')
+            .setTitle('راهنمای کامل مدیریت بات')
+            .setDescription('برای دسترسی سریع، از منوی زیر بخش مورد نظر را انتخاب کنید.')
+            .addFields(
+                { name: 'بخش‌ها', value: '• معرفی دستورات مدیریتی\n• راهنمای تنظیمات بات\n• دستورات کاربردی برای ادمین‌ها\n• نکات امنیتی و بهترین روش‌ها' },
+                { name: 'نمونه‌های سریع', value: 'مثال‌ها:\n`/warn user:@User reason:"اسپم"`\n`/clear amount:50`\n`/start-giveaway channel:#announcements duration:1d winners:2 prize:"Nitro"`' }
+            )
+            .setFooter({ text: 'برای نمایش جزئیات هر بخش، از منوی انتخاب استفاده کنید' })
+            .setTimestamp();
+        const menu = new StringSelectMenuBuilder()
+            .setCustomId('help_menu')
+            .setPlaceholder('یک بخش را انتخاب کنید')
+            .addOptions(
+                { label: 'معرفی دستورات مدیریتی', value: 'moderation_overview', emoji: '🛠️' },
+                { label: 'راهنمای تنظیمات بات', value: 'bot_settings', emoji: '⚙️' },
+                { label: 'دستورات کاربردی برای ادمین‌ها', value: 'admin_util', emoji: '🧰' },
+                { label: 'نکات امنیتی و بهترین روش‌ها', value: 'security_best', emoji: '🛡️' }
+            );
+        const linksRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('README').setURL(docs.readme),
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('SETUP').setURL(docs.setup),
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Issues').setURL(docs.issues),
+            new ButtonBuilder().setCustomId('help_refresh').setStyle(ButtonStyle.Secondary).setLabel('Refresh')
+        );
+        const menuRow = new ActionRowBuilder().addComponents(menu);
+        await interaction.editReply({ embeds: [introEmbed], components: [menuRow, linksRow] });
+        return;
+    }
+
+    if (interaction.customId.startsWith('request_unban_')) {
+        const userId = interaction.customId.split('_')[2];
+        if (interaction.user.id !== userId) {
+            return await interaction.reply({ content: '❌ فقط خودتان می‌توانید درخواست آن‌بن ثبت کنید.', flags: MessageFlags.Ephemeral });
+        }
+
+        const appeals = db.moderation.get('server_appeals') || {};
+        const existing = appeals[userId];
+        const now = Date.now();
+        const ONE_HOUR = 60 * 60 * 1000;
+
+        if (existing) {
+            if (existing.status === 'pending') {
+                return await interaction.reply({ content: '⏳ درخواست قبلی شما در حال بررسی است.', flags: MessageFlags.Ephemeral });
+            }
+            if (existing.status === 'denied' && (now - (existing.denied_at || 0)) < ONE_HOUR) {
+                const remaining = Math.ceil((ONE_HOUR - (now - existing.denied_at)) / (60 * 1000));
+                return await interaction.reply({ content: `⏳ لطفاً ${remaining} دقیقه دیگر دوباره تلاش کنید.`, flags: MessageFlags.Ephemeral });
+            }
+        }
+
+        const modal = new ModalBuilder()
+            .setCustomId(`server_unban_modal_${userId}`)
+            .setTitle('درخواست آن‌بن سرور')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('ban_time')
+                        .setLabel('ساعت تقریبی بن شدن')
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder('یکی از موارد: آخرین 1 ساعت | امروز | دیروز | هفته اخیر | نامشخص')
+                        .setRequired(true)
+                        .setMaxLength(20)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('justification')
+                        .setLabel('چرا فکر می‌کنید بن اشتباه بوده؟')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMaxLength(1000)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('prior_warnings')
+                        .setLabel('آیا قبلاً اخطار داشتید؟ (بله/خیر/نامشخص)')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(false)
+                        .setMaxLength(20)
+                )
+            );
+
+        await interaction.showModal(modal);
+        return;
+    }
     // چک کردن رای قبلی کاربر
     const userId = interaction.user.id;
     const previousVoteIndex = poll.voters ? poll.voters[userId] : undefined;
@@ -278,6 +370,109 @@ if (interaction.customId.startsWith('poll_vote_')) {
                 content: '❌ Error processing appeal decision.', 
                 flags: MessageFlags.Ephemeral 
             });
+        }
+        return;
+    }
+
+    if (interaction.customId.startsWith('server_unban_approve_') || interaction.customId.startsWith('server_unban_deny_')) {
+        if (!interaction.member || !interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await interaction.reply({ content: '❌ شما دسترسی لازم برای مدیریت اپیل را ندارید.', flags: MessageFlags.Ephemeral });
+        }
+
+        const parts = interaction.customId.split('_');
+        const action = parts[2]; // 'approve' or 'deny'
+        const userId = parts[3];
+
+        try {
+            const appeals = db.moderation.get('server_appeals') || {};
+            const appeal = appeals[userId];
+            if (!appeal || appeal.status !== 'pending') {
+                return await interaction.reply({ content: '❌ اپیل معتبر یافت نشد یا قبلاً رسیدگی شده است.', flags: MessageFlags.Ephemeral });
+            }
+
+            const targetGuild = interaction.guild || interaction.client.guilds.cache.get(config.bot.guildId);
+            if (!targetGuild) {
+                return await interaction.reply({ content: '❌ گیلد هدف یافت نشد.', flags: MessageFlags.Ephemeral });
+            }
+
+            if (action === 'approve') {
+                try {
+                    await targetGuild.members.unban(userId, 'Unban approved by staff');
+                } catch (e) {
+                    // Try alternate API
+                    try { await targetGuild.bans.remove(userId, 'Unban approved by staff'); } catch {}
+                }
+
+                let inviteUrl = 'N/A';
+                try {
+                    const channel = targetGuild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(targetGuild.members.me).has('CreateInvite'));
+                    if (channel) {
+                        const invite = await channel.createInvite({ maxUses: 1, maxAge: 86400, reason: `Unban approved for ${userId}` });
+                        inviteUrl = invite.url;
+                    }
+                } catch {}
+
+                const successEmbed = new EmbedBuilder()
+                    .setColor('Green')
+                    .setTitle('✅ درخواست آن‌بن تایید شد')
+                    .setDescription('شما آن‌بن شدید. می‌توانید به سرور بازگردید.')
+                    .addFields(
+                        { name: '🔗 لینک دعوت', value: inviteUrl !== 'N/A' ? `[ورود به سرور](${inviteUrl})` : 'N/A', inline: false },
+                        { name: '🎉 خوش آمدید', value: 'منتظر شما هستیم! قوانین را رعایت کنید.', inline: false }
+                    )
+                    .setTimestamp();
+
+                try {
+                    const userObj = await interaction.client.users.fetch(userId);
+                    await userObj.send({ embeds: [successEmbed] }).catch(() => {});
+                } catch {}
+
+                const updated = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor('Green')
+                    .setTitle('✅ اپیل تایید شد');
+                await interaction.update({ embeds: [updated], components: [] });
+
+                appeals[userId] = { ...appeal, status: 'approved', approved_at: Date.now(), approved_by: interaction.user.id };
+                db.moderation.set('server_appeals', appeals);
+
+                if (logger) {
+                    await logger.logInfo('Server Unban Appeal Approved', {
+                        UserId: userId,
+                        ApprovedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                        ApprovedAt: Date.now()
+                    });
+                }
+            } else {
+                const denyDM = new EmbedBuilder()
+                    .setColor('Red')
+                    .setTitle('❌ درخواست آن‌بن رد شد')
+                    .setDescription('اطلاعات کافی نبود. می‌توانید پس از 1 ساعت دوباره درخواست دهید.')
+                    .setTimestamp();
+                try {
+                    const userObj = await interaction.client.users.fetch(userId);
+                    await userObj.send({ embeds: [denyDM] }).catch(() => {});
+                } catch {}
+
+                const updated = EmbedBuilder.from(interaction.message.embeds[0])
+                    .setColor('Red')
+                    .setTitle('❌ اپیل رد شد');
+                await interaction.update({ embeds: [updated], components: [] });
+
+                appeals[userId] = { ...appeal, status: 'denied', denied_at: Date.now(), denied_by: interaction.user.id };
+                db.moderation.set('server_appeals', appeals);
+
+                if (logger) {
+                    await logger.logInfo('Server Unban Appeal Denied', {
+                        UserId: userId,
+                        DeniedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                        DeniedAt: Date.now()
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error('Error handling server unban appeal decision:', error);
+            await interaction.reply({ content: '❌ خطا در پردازش تصمیم اپیل.', flags: MessageFlags.Ephemeral });
         }
         return;
     }
@@ -1367,7 +1562,7 @@ async function handleSelectMenu(interaction, client, env) {
                 const banIndex = supportBans.findIndex(ban => ban.user_id === user.id);
                 if (banIndex !== -1) {
                     supportBans[banIndex] = activeBan;
-                    db.set('support_bans', supportBans);
+                    db.support.set('bans', supportBans);
                 }
                 
                 // Log auto-unban
@@ -1454,6 +1649,72 @@ async function handleSelectMenu(interaction, client, env) {
         await interaction.showModal(modal);
     }
 
+    if (customId === 'help_menu') {
+        const section = values[0];
+        let embed = new EmbedBuilder().setColor('#34495E').setTimestamp();
+        if (section === 'moderation_overview') {
+            embed = embed
+                .setTitle('🛠️ معرفی دستورات مدیریتی')
+                .setDescription('نمای کلی از دستورات مدیریتی بات به همراه مثال‌ها و پارامترها')
+                .addFields(
+                    { name: 'اخطار', value: '`/warn user:@User reason:"دلیل"`\nپارامترها: `user` اجباری، `reason` اختیاری\nخطاهای رایج: دسترسی ناکافی، کاربر یافت نشد' },
+                    { name: 'پاک‌کردن اخطارها', value: '`/clearwarnings user:@User`\nپارامترها: `user` اجباری\nخطاها: دسترسی ناکافی' },
+                    { name: 'کیـک', value: '`/kick user:@User reason:"دلیل"`\nپارامترها: `user` اجباری، `reason` اختیاری\nخطاها: عدم امکان کیک نقش بالاتر' },
+                    { name: 'بن و آن‌بن', value: '`/ban user:@User reason:"دلیل" deletedays:7`\n`/unban userid:123456789`\nخطاها: دسترسی ناکافی، ID اشتباه، نقش بالاتر' },
+                    { name: 'پاک‌سازی پیام‌ها', value: '`/clear amount:50 user:@User`\nپارامترها: `amount` اجباری (1-100)، `user` اختیاری\nخطاها: پیام‌های قدیمی‌تر از ۱۴ روز' }
+                );
+        } else if (section === 'bot_settings') {
+            const tokenStatus = config.bot && config.bot.token && !String(config.bot.token).includes('YOUR_') ? '✅ تنظیم شده' : '❌ تنظیم نشده';
+            const clientIdStatus = config.bot && config.bot.clientId && !String(config.bot.clientId).includes('YOUR_') ? '✅ تنظیم شده' : '❌ تنظیم نشده';
+            const guildIdStatus = config.bot && config.bot.guildId && !String(config.bot.guildId).includes('YOUR_') ? '✅ تنظیم شده' : '❌ تنظیم نشده';
+            embed = embed
+                .setTitle('⚙️ راهنمای تنظیمات بات')
+                .setDescription('تنظیمات کلیدی در `config.json` و نکات کاربردی')
+                .addFields(
+                    { name: 'وضعیت اتصال', value: `توکن: ${tokenStatus} | Client ID: ${clientIdStatus} | Guild ID: ${guildIdStatus}` },
+                    { name: 'کانال‌ها و نقش‌ها', value: 'مقادیر `channels.*` و `roles.*` را با IDهای صحیح پر کنید. برای ارسال منوی نقش/تیکت از `/sendrolemenu` و `/sendticketmenu` استفاده کنید.' },
+                    { name: 'ویژگی‌ها', value: 'فعال‌سازی/غیرفعالسازی فیچرها در `features` (مثلا: `badWords`, `warningSystem`).' },
+                    { name: 'به‌روزرسانی اطلاعات', value: 'برای دریافت آخرین وضعیت تنظیمات، از دکمه `Refresh` استفاده کنید.' }
+                );
+        } else if (section === 'admin_util') {
+            embed = embed
+                .setTitle('🧰 دستورات کاربردی برای ادمین‌ها')
+                .setDescription('دستورات پیشرفته برای مدیریت حرفه‌ای')
+                .addFields(
+                    { name: 'ارسال پیام سفارشی', value: '`/sendmessage channel:#ch user:@User embed:true color:#2C3E50`\nقابلیت ارسال به کاربر یا کانال، با امبد.' },
+                    { name: 'تبلیغ به نقش', value: '`/advertise target_role:@Role color:#E74C3C`\nبا مودال برای متن و دکمه و تصویر.' },
+                    { name: 'گیووی', value: '`/start-giveaway channel:#ch duration:1d winners:2 prize:"جایزه"`\n`/end-giveaway messageid:123`' },
+                    { name: 'آمار و اطلاعات', value: '`/invites`, `/invites-leaderboard`, `/rolestats`, `/serverinfo`, `/userinfo`' },
+                    { name: 'مدیریت تیکت', value: '`/sendticketmenu` برای ایجاد منوی تیکت با دسته‌بندی و دکمه‌ها.' }
+                );
+        } else if (section === 'security_best') {
+            embed = embed
+                .setTitle('🛡️ نکات امنیتی و بهترین روش‌ها')
+                .setDescription('راهنمای ایمن‌سازی بات و مدیریت سرور')
+                .addFields(
+                    { name: 'سیستم اخطار 3 مرحله‌ای', value: 'پس از 3 اخطار، بن خودکار. از `/warn` و `maxWarnings` در تنظیمات استفاده کنید.' },
+                    { name: 'فیلتر کلمات بد', value: '`/addbadword`, `/removebadword`, `/listbadwords`, `/importbadwords` برای مدیریت لیست.' },
+                    { name: 'Rate Limit و Cooldown', value: 'سیستم محدودکننده برای جلوگیری از اسپم دستورات. پیام‌های خطا شامل زمان باقی‌مانده.' },
+                    { name: 'Anti-Raid و Blacklist', value: 'تشخیص حملات و محدودسازی خودکار. از دستورات `security status` و `security report` استفاده کنید.' },
+                    { name: 'مجوزها', value: 'قبل از عملیات مدیریتی، دسترسی کاربر بررسی می‌شود. از نقش‌های مناسب استفاده کنید.' }
+                );
+        }
+
+        const docs = {
+            readme: (config.docs && config.docs.readmeUrl) || 'https://github.com/RezaNotHere/West-Bot#readme',
+            setup: (config.docs && config.docs.setupUrl) || 'https://github.com/RezaNotHere/West-Bot/blob/main/SETUP.md',
+            issues: (config.docs && config.docs.issuesUrl) || 'https://github.com/RezaNotHere/West-Bot/issues'
+        };
+        const linksRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('README').setURL(docs.readme),
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('SETUP').setURL(docs.setup),
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Issues').setURL(docs.issues),
+            new ButtonBuilder().setCustomId('help_refresh').setStyle(ButtonStyle.Secondary).setLabel('Refresh')
+        );
+        await interaction.update({ embeds: [embed], components: [interaction.message.components[0], linksRow] });
+        return;
+    }
+
 }
 
 // --- handleModal ---
@@ -1461,6 +1722,17 @@ async function handleModal(interaction, client, env) {
     const { customId, fields, user, guild } = interaction;
     const REVIEW_CHANNEL_ID = config.channels.review;
     const BUYER_ROLE_ID = config.roles.buyer;
+
+    // Defer the interaction if not already replied or deferred
+    if (!interaction.replied && !interaction.deferred) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
+
+    const ensureDefer = async () => {
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        }
+    };
 
     // --- support_appeal_modal_ ---
     if (customId.startsWith('support_appeal_modal_')) {
@@ -1479,7 +1751,7 @@ async function handleModal(interaction, client, env) {
             const additionalInfo = fields.getTextInputValue('additional_info');
 
             // Get support ban channel from config
-            const supportBanChannelId = config.channels.supportBan;
+            const supportBanChannelId = config.channels.banSupport;
             if (!supportBanChannelId) {
                 return await interaction.editReply({ 
                     content: '❌ Support ban channel not configured.', 
@@ -1578,70 +1850,148 @@ async function handleModal(interaction, client, env) {
         return;
     }
 
+    if (customId.startsWith('server_unban_modal_')) {
+        const userId = customId.split('_')[3];
+        if (user.id !== userId) {
+            return await interaction.editReply({ content: '❌ فقط خودتان می‌توانید درخواست آن‌بن ثبت کنید.', flags: MessageFlags.Ephemeral });
+        }
+
+        await ensureDefer();
+
+        const banTime = (fields.getTextInputValue('ban_time') || '').trim();
+        const justification = (fields.getTextInputValue('justification') || '').trim();
+        const priorWarnings = (fields.getTextInputValue('prior_warnings') || 'نامشخص').trim();
+
+        const allowedTimes = ['آخرین 1 ساعت', 'امروز', 'دیروز', 'هفته اخیر', 'نامشخص'];
+        if (!allowedTimes.includes(banTime)) {
+            return await interaction.editReply({ content: '❌ مقدار "ساعت تقریبی بن" نامعتبر است. از گزینه‌های پیشنهادی استفاده کنید.', flags: MessageFlags.Ephemeral });
+        }
+        if (!justification || justification.length < 10) {
+            return await interaction.editReply({ content: '❌ لطفاً توضیح کافی برای دلیل اشتباه بودن بن وارد کنید (حداقل 10 کاراکتر).', flags: MessageFlags.Ephemeral });
+        }
+
+        const appeals = db.moderation.get('server_appeals') || {};
+        appeals[userId] = {
+            user_id: userId,
+            user_tag: user.tag,
+            account_created: user.createdTimestamp,
+            ban_time: banTime,
+            justification,
+            prior_warnings: priorWarnings,
+            submitted_at: Date.now(),
+            status: 'pending'
+        };
+        db.moderation.set('server_appeals', appeals);
+
+        const targetGuild = client.guilds.cache.get(config.bot.guildId);
+        let banReason = 'N/A';
+        try {
+            if (targetGuild) {
+                const banInfo = await targetGuild.bans.fetch(userId).catch(() => null);
+                banReason = banInfo?.reason || 'N/A';
+            }
+        } catch {}
+
+        const adminChannelId = config.channels.banSupport;
+        if (!adminChannelId) {
+            return await interaction.editReply({ content: '❌ کانال اپیل ادمین پیکربندی نشده است.', flags: MessageFlags.Ephemeral });
+        }
+        const adminChannel = targetGuild?.channels?.cache?.get(adminChannelId);
+        if (!adminChannel || !adminChannel.isTextBased()) {
+            return await interaction.editReply({ content: '❌ کانال اپیل ادمین یافت نشد یا متنی نیست.', flags: MessageFlags.Ephemeral });
+        }
+
+        const appealEmbed = new EmbedBuilder()
+            .setColor('Yellow')
+            .setTitle('📝 درخواست آن‌بن سرور')
+            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+            .addFields(
+                { name: '👤 کاربر', value: `${user.tag} (${user.id})`, inline: true },
+                { name: '📅 ساخت حساب', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`, inline: true },
+                { name: '⏰ زمان تقریبی بن', value: banTime, inline: true },
+                { name: '🧾 دلیل بن (ثبت‌شده)', value: banReason || 'N/A', inline: false },
+                { name: '📝 توضیحات کاربر', value: justification.substring(0, 1024), inline: false },
+                { name: '⚠️ اخطار قبلی', value: priorWarnings || 'نامشخص', inline: true }
+            )
+            .setTimestamp();
+
+        const approveBtn = new ButtonBuilder()
+            .setCustomId(`server_unban_approve_${userId}`)
+            .setLabel('✅ تایید')
+            .setStyle(ButtonStyle.Success);
+        const denyBtn = new ButtonBuilder()
+            .setCustomId(`server_unban_deny_${userId}`)
+            .setLabel('❌ رد')
+            .setStyle(ButtonStyle.Danger);
+        const row = new ActionRowBuilder().addComponents(approveBtn, denyBtn);
+
+        await adminChannel.send({ embeds: [appealEmbed], components: [row] });
+
+        await interaction.editReply({
+            embeds: [new EmbedBuilder().setColor('Green').setDescription('✅ درخواست شما ثبت شد و توسط ادمین‌ها بررسی می‌شود.')]
+        });
+
+        if (logger) {
+            await logger.logInfo('Server Unban Appeal Submitted', {
+                User: `${user.tag} (${user.id})`,
+                BanTime: banTime,
+                PriorWarnings: priorWarnings,
+                SubmittedAt: Date.now()
+            });
+        }
+        return;
+    }
+
     if (customId === 'add_card_modal') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return await interaction.editReply({ content: '❌ You do not have permission to add cards.', flags: MessageFlags.Ephemeral });
+            return await interaction.editReply({ content: '❌ شما دسترسی لازم برای افزودن کارت را ندارید.', flags: MessageFlags.Ephemeral });
         }
 
         try {
             const cardNumber = fields.getTextInputValue('card_number');
             const cardHolder = fields.getTextInputValue('card_holder');
-            const expiryDate = fields.getTextInputValue('expiry_date');
-            const cvv = fields.getTextInputValue('cvv');
-            const cardType = fields.getTextInputValue('card_type');
+            const bankName = fields.getTextInputValue('bank_name');
 
-            // Validate card number (16 digits)
+            // اعتبارسنجی شماره کارت (۱۶ رقم)
             if (!/^\d{16}$/.test(cardNumber)) {
-                return await interaction.editReply({ content: '❌ Card number must be exactly 16 digits.', flags: MessageFlags.Ephemeral });
+                return await interaction.editReply({ content: '❌ شماره کارت باید دقیقاً ۱۶ رقم باشد.', flags: MessageFlags.Ephemeral });
             }
 
-            // Validate expiry date (MM/YY format)
-            if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiryDate)) {
-                return await interaction.editReply({ content: '❌ Expiry date must be in MM/YY format (e.g., 12/25).', flags: MessageFlags.Ephemeral });
-            }
-
-            // Validate CVV (3 digits)
-            if (!/^\d{3}$/.test(cvv)) {
-                return await interaction.editReply({ content: '❌ CVV must be exactly 3 digits.', flags: MessageFlags.Ephemeral });
-            }
-
-            // Get existing cards
+            // دریافت کارت‌های موجود
             const cards = db.cards.get('all_cards') || [];
             
-            // Add new card
+            // ساخت آبجکت کارت جدید
             const newCard = {
                 card_number: cardNumber,
                 card_holder: cardHolder,
-                expiry_date: expiryDate,
-                cvv: cvv,
-                card_type: cardType.toLowerCase(),
+                bank_name: bankName,
                 added_at: Date.now(),
                 added_by: `${interaction.user.tag} (${interaction.user.id})`
             };
 
             cards.push(newCard);
-            db.set('bank_cards', cards);
+            
+            db.cards.set('all_cards', cards);
 
             const embed = new EmbedBuilder()
                 .setColor('Green')
-                .setTitle('✅ Card Added Successfully')
-                .setDescription('Bank card has been added to the database.')
+                .setTitle('✅ کارت بانکی اضافه شد')
+                .setDescription('کارت با موفقیت در دیتابیس ذخیره شد.')
                 .addFields(
-                    { name: 'Card Type', value: cardType.toUpperCase(), inline: true },
-                    { name: 'Card Holder', value: cardHolder, inline: true },
-                    { name: 'Last 4 Digits', value: `****-****-****-${cardNumber.slice(-4)}`, inline: true },
-                    { name: 'Expiry Date', value: expiryDate, inline: true },
-                    { name: 'Total Cards', value: `${cards.length}`, inline: true }
+                    { name: '🏦 نام بانک', value: bankName, inline: true },
+                    { name: '👤 صاحب کارت', value: cardHolder, inline: true },
+                    { name: '🔢 شماره کارت', value: `****-****-****-${cardNumber.slice(-4)}`, inline: true },
+                    { name: '📊 موجودی کارت‌ها', value: `${cards.length} عدد`, inline: true }
                 )
-                .setFooter({ text: `Added by ${interaction.user.tag}` })
+                .setFooter({ text: `اضافه شده توسط ${interaction.user.tag}` })
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
 
             if (logger) {
                 await logger.logInfo('Card Added', {
-                    AddedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                    CardType: cardType,
+                    AddedBy: `${interaction.user.tag}`,
+                    Bank: bankName,
                     Last4Digits: cardNumber.slice(-4),
                     TotalCards: cards.length
                 });
@@ -1649,17 +1999,13 @@ async function handleModal(interaction, client, env) {
 
         } catch (error) {
             console.error('Error adding card:', error);
-            await interaction.editReply({ content: '❌ Error adding card to database.', flags: MessageFlags.Ephemeral });
+            await interaction.editReply({ content: '❌ خطا در ذخیره کارت در دیتابیس.', flags: MessageFlags.Ephemeral });
         }
         return;
     }
 
     if (customId.startsWith('review_comment_modal_')) {
         try {
-            // Check if interaction is already replied/deferred
-            if (interaction.replied || interaction.deferred) {
-                return;
-            }
 
             const rating = customId.split('_')[3];
             const comment = fields.getTextInputValue('comment_input');
@@ -1679,15 +2025,27 @@ async function handleModal(interaction, client, env) {
             }
 
             const successEmbed = new EmbedBuilder().setColor('Green').setDescription('Thank you! Your review and rating have been submitted successfully.');
-            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            await interaction.editReply({ embeds: [successEmbed] });
 
             if (BUYER_ROLE_ID) {
                 const member = await guild.members.fetch(user.id);
                 await member.roles.add(BUYER_ROLE_ID);
             }
         } catch (err) {
-            // Only reply if not already replied
-            if (!interaction.replied && !interaction.deferred) {
+            // Only edit reply if deferred
+            if (interaction.deferred && !interaction.replied) {
+                try {
+                    await interaction.editReply({ content: '❌ Error submitting review or rating.' });
+                } catch (replyErr) {
+                    // If editReply fails, log it but don't throw
+                    if (logger) {
+                        await logger.logError(replyErr, 'Modal Reply Error', {
+                            CustomId: customId,
+                            User: `${user.tag} (${user.id})`
+                        });
+                    }
+                }
+            } else if (!interaction.replied && !interaction.deferred) {
                 try {
                     await interaction.reply({ content: '❌ Error submitting review or rating.', flags: MessageFlags.Ephemeral });
                 } catch (replyErr) {
@@ -1786,21 +2144,16 @@ async function handleModal(interaction, client, env) {
 
     if (customId === 'other_reason_modal') {
         try {
-            // Check if interaction is already replied/deferred
-            if (interaction.replied || interaction.deferred) {
-                return;
-            }
-            
             const reason = fields.getTextInputValue('other_reason_input');
             await createTicketChannel(guild, user, 'other', reason);
             const ticketChannelId = (db.tickets && db.tickets.get) ? db.tickets.get(user.id) : null;
-            
+
             const successEmbed = new EmbedBuilder()
                 .setColor('Green')
                 .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
-            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
-            
+            await interaction.editReply({ embeds: [successEmbed] });
+
             if (logger) {
                 await logger.logTicket('Created (other)', user, {
                     TicketChannel: ticketChannelId ? `<#${ticketChannelId}>` : 'N/A',
@@ -1809,12 +2162,12 @@ async function handleModal(interaction, client, env) {
                 });
             }
         } catch (err) {
-            // Only reply if not already replied
-            if (!interaction.replied && !interaction.deferred) {
+            // Only edit reply if deferred
+            if (interaction.deferred && !interaction.replied) {
                 try {
-                    await interaction.reply({ content: '❌ Error creating ticket.', flags: MessageFlags.Ephemeral });
+                    await interaction.editReply({ content: '❌ Error creating ticket.' });
                 } catch (replyErr) {
-                    // If reply fails, log it but don't throw
+                    // If editReply fails, log it but don't throw
                     if (logger) {
                         await logger.logError(replyErr, 'Modal Reply Error', {
                             CustomId: customId,
@@ -1823,7 +2176,7 @@ async function handleModal(interaction, client, env) {
                     }
                 }
             }
-            
+
             if (logger) {
                 await logger.logError(err, 'Review Modal', {
                     CustomId: customId,
