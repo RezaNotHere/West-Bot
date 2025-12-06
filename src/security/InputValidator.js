@@ -21,7 +21,7 @@ class InputValidator {
         this.allowedPatterns = {
             minecraftUsername: /^[a-zA-Z0-9_]{1,16}$/,
             discordId: /^\d{17,19}$/,
-            safeText: /^[\w\s\-.,!?@#%&*()+=:[\]{}'"<>\/\\|`~]$/,
+            safeText: /^[^\u0000-\u001f\u007f-\u009f<>]+$/,
             numbers: /^\d+$/,
             safeString: /^[a-zA-Z0-9\s\-_.]+$/,
             duration: /^\d+[smhd]$/,

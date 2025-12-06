@@ -1,4 +1,4 @@
-// handlers.js
+﻿// handlers.js
 const { db } = require('./database');
 const utils = require('./utils');
 const { logAction, createTicketChannel } = require('./utils');

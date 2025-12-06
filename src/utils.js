@@ -813,15 +813,16 @@ async function updateShopStatus(client, guild) {
 
 async function checkGiveaways() {
     if (db.giveaways.size === 0) return;
-    console.log(`Checking ${db.giveaways.size} total giveaway(s) in the database...`);
-    for (const [messageId, giveaway] of db.giveaways.entries()) {
-        if (giveaway.ended) continue;
+    for (const messageId of db.giveaways.keys()) {
+        const giveaway = db.giveaways.get(messageId);
+        if (!giveaway || giveaway.ended) continue;
         const now = Date.now();
         const remainingTime = giveaway.endTime - now;
         if (remainingTime <= 0) {
             await endGiveaway(messageId);
         } else {
-            setTimeout(() => endGiveaway(messageId), remainingTime);
+            const delay = Number.isFinite(remainingTime) && remainingTime > 0 ? remainingTime : 0;
+            setTimeout(() => endGiveaway(messageId), delay);
         }
     }
 }
