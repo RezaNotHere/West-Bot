@@ -1,4 +1,4 @@
-﻿// handlers.js
+// handlers.js
 const { db } = require('./database');
 const utils = require('./utils');
 const { logAction, createTicketChannel } = require('./utils');
@@ -95,7 +95,7 @@ if (interaction.customId.startsWith('poll_vote_')) {
                         .setLabel('ساعت تقریبی بن شدن')
                         .setStyle(TextInputStyle.Short)
                         .setPlaceholder('یکی از موارد: آخرین 1 ساعت | امروز | دیروز | هفته اخیر | نامشخص')
-                        .setRequired(true)
+                        .setRequired(false)
                         .setMaxLength(20)
                 ),
                 new ActionRowBuilder().addComponents(
@@ -145,242 +145,15 @@ if (interaction.customId.startsWith('poll_vote_')) {
     await safeReply(interaction, { content: `✅ رای شما برای گزینه **${poll.options[optionIndex].name}** ثبت شد.`, flags: MessageFlags.Ephemeral });
     }
     
-    // Handle appeal support ban button
-    if (interaction.customId.startsWith('appeal_support_ban_')) {
-        const userId = interaction.customId.split('_')[3];
-        
-        // Check if this user is trying to appeal their own ban
-        if (interaction.user.id !== userId) {
-            return await interaction.reply({ 
-                content: '❌ You can only appeal your own support ban.', 
-                flags: MessageFlags.Ephemeral 
-            });
-        }
 
-        // Check cooldown (1 hour after denial)
-        const appeals = db.support.get('appeals') || {};
-        const userAppeal = appeals[userId];
-        
-        if (userAppeal && userAppeal.status === 'denied') {
-            const timeSinceDenial = Date.now() - userAppeal.denied_at;
-            const oneHour = 60 * 60 * 1000;
-            
-            if (timeSinceDenial < oneHour) {
-                const remainingTime = Math.ceil((oneHour - timeSinceDenial) / (60 * 1000));
-                return await interaction.reply({ 
-                    content: `❌ You must wait ${remainingTime} more minutes before submitting another appeal.`, 
-                    flags: MessageFlags.Ephemeral 
-                });
-            }
-        }
 
-        // Create appeal modal
-        const modal = new ModalBuilder()
-            .setCustomId(`support_appeal_modal_${userId}`)
-            .setTitle('Support Ban Appeal')
-            .addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('appeal_reason')
-                        .setLabel('Why do you think the ban was made in error?')
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setPlaceholder('Please explain why you believe this ban was a mistake...')
-                        .setRequired(true)
-                        .setMaxLength(1000)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('additional_info')
-                        .setLabel('Additional information (optional)')
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setPlaceholder('Any additional context or information you\'d like to provide...')
-                        .setRequired(false)
-                        .setMaxLength(500)
-                )
-            );
-
-        await interaction.showModal(modal);
-        return;
-    }
-
-    // Handle approve/deny appeal buttons
-    if (interaction.customId.startsWith('approve_appeal_') || interaction.customId.startsWith('deny_appeal_')) {
-        // Check if user has permission to handle appeals
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-            return await interaction.reply({ 
-                content: '❌ You do not have permission to handle appeals.', 
-                flags: MessageFlags.Ephemeral 
-            });
-        }
-
-        const userId = interaction.customId.split('_')[2];
-        const action = interaction.customId.split('_')[0]; // 'approve' or 'deny'
-
-        try {
-            // Get appeal data
-            const appeals = db.support.get('appeals') || {};
-            const appeal = appeals[userId];
-            
-            if (!appeal) {
-                return await interaction.reply({ 
-                    content: '❌ Appeal not found.', 
-                    flags: MessageFlags.Ephemeral 
-                });
-            }
-
-            // Get the user who submitted the appeal
-            const targetUser = await interaction.guild.members.fetch(userId).catch(() => null);
-            
-            if (action === 'approve') {
-                // Remove from support bans
-                const supportBans = db.support.get('bans') || [];
-                const updatedBans = supportBans.filter(ban => ban.user_id !== userId);
-                db.support.set('bans', updatedBans);
-
-                // Update appeal status
-                appeal.status = 'approved';
-                appeal.approved_at = Date.now();
-                appeal.approved_by = interaction.user.id;
-                appeals[userId] = appeal;
-                db.support.set('appeals', appeals);
-
-                // Create invite link
-                const invite = await interaction.guild.invites.create(config.channels.welcome || interaction.guild.systemChannelId, {
-                    maxUses: 1,
-                    maxAge: 3600, // 1 hour
-                    reason: `Support ban appeal approved for ${targetUser?.user?.tag || userId}`
-                });
-
-                // Notify user
-                if (targetUser) {
-                    const approveEmbed = new EmbedBuilder()
-                        .setColor('Green')
-                        .setTitle('✅ Support Ban Appeal Approved')
-                        .setDescription('Your support ban appeal has been approved!')
-                        .addFields(
-                            { name: '🎉 Welcome Back', value: 'You can now create support tickets again.', inline: true },
-                            { name: '🔗 Server Invite', value: `[Click here to rejoin the server](${invite.url})`, inline: true },
-                            { name: '👮 Approved by', value: interaction.user.tag, inline: true }
-                        )
-                        .setFooter({ text: 'This invite link expires in 1 hour' })
-                        .setTimestamp();
-
-                    await targetUser.send({ embeds: [approveEmbed] }).catch(() => {
-                        console.log(`Could not DM user ${userId} about appeal approval`);
-                    });
-                }
-
-                // Update original message
-                const approvedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setColor('Green')
-                    .setTitle('✅ Appeal Approved')
-                    .addFields(
-                        { name: '👤 Approved by', value: interaction.user.tag, inline: true },
-                        { name: '⏰ Approved at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-                        { name: '🎉 User Unbanned', value: 'User can now create support tickets again', inline: false }
-                    );
-
-                await interaction.update({ 
-                    embeds: [approvedEmbed], 
-                    components: [] // Remove buttons
-                });
-
-                // Update ban history
-                const banHistory = db.moderation.get('history') || {};
-                if (banHistory[userId]) {
-                    banHistory[userId].appeals_approved = (banHistory[userId].appeals_approved || 0) + 1;
-                    banHistory[userId].last_action = Date.now();
-                    banHistory[userId].last_action_by = `${interaction.user.tag} (${interaction.user.id})`;
-                    db.moderation.set('history', banHistory);
-                }
-
-                if (logger) {
-                    await logger.logInfo('Support Appeal Approved', {
-                        User: `${targetUser?.user?.tag || userId} (${userId})`,
-                        ApprovedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                        ApprovedAt: Date.now(),
-                        OriginalReason: appeal.reason.substring(0, 100)
-                    });
-                }
-
-            } else if (action === 'deny') {
-                // Update appeal status
-                appeal.status = 'denied';
-                appeal.denied_at = Date.now();
-                appeal.denied_by = interaction.user.id;
-                appeals[userId] = appeal;
-                db.support.set('appeals', appeals);
-
-                // Notify user
-                if (targetUser) {
-                    const denyEmbed = new EmbedBuilder()
-                        .setColor('Red')
-                        .setTitle('❌ Support Ban Appeal Denied')
-                        .setDescription('Your support ban appeal has been denied.')
-                        .addFields(
-                            { name: '⏰ Next Attempt', value: 'You can submit another appeal in 1 hour.', inline: true },
-                            { name: '👮 Denied by', value: interaction.user.tag, inline: true },
-                            { name: '📝 Reason', value: 'Staff has reviewed your appeal and decided to maintain the ban.', inline: false }
-                        )
-                        .setFooter({ text: 'Contact server administrators for more information' })
-                        .setTimestamp();
-
-                    await targetUser.send({ embeds: [denyEmbed] }).catch(() => {
-                        console.log(`Could not DM user ${userId} about appeal denial`);
-                    });
-                }
-
-                // Update original message
-                const deniedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setColor('Red')
-                    .setTitle('❌ Appeal Denied')
-                    .addFields(
-                        { name: '👤 Denied by', value: interaction.user.tag, inline: true },
-                        { name: '⏰ Denied at', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-                        { name: '🚫 Ban Maintained', value: 'User remains banned from support tickets', inline: false }
-                    );
-
-                await interaction.update({ 
-                    embeds: [deniedEmbed], 
-                    components: [] // Remove buttons
-                });
-
-                // Update ban history
-                const banHistory = db.moderation.get('history') || {};
-                if (banHistory[userId]) {
-                    banHistory[userId].appeals_denied = (banHistory[userId].appeals_denied || 0) + 1;
-                    banHistory[userId].last_action = Date.now();
-                    banHistory[userId].last_action_by = `${interaction.user.tag} (${interaction.user.id})`;
-                    db.moderation.set('history', banHistory);
-                }
-
-                if (logger) {
-                    await logger.logInfo('Support Appeal Denied', {
-                        User: `${targetUser?.user?.tag || userId} (${userId})`,
-                        DeniedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                        DeniedAt: Date.now(),
-                        OriginalReason: appeal.reason.substring(0, 100)
-                    });
-                }
-            }
-
-        } catch (error) {
-            console.error('Error handling appeal decision:', error);
-            await interaction.reply({ 
-                content: '❌ Error processing appeal decision.', 
-                flags: MessageFlags.Ephemeral 
-            });
-        }
-        return;
-    }
-
-    if (interaction.customId.startsWith('server_unban_approve_') || interaction.customId.startsWith('server_unban_deny_')) {
+    if (interaction.customId.startsWith('server_unban_approve_')) {
         if (!interaction.member || !interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
             return await interaction.reply({ content: '❌ شما دسترسی لازم برای مدیریت اپیل را ندارید.', flags: MessageFlags.Ephemeral });
         }
 
         const parts = interaction.customId.split('_');
-        const action = parts[2]; // 'approve' or 'deny'
+        const action = parts[2]; // 'approve'
         const userId = parts[3];
 
         try {
@@ -395,86 +168,103 @@ if (interaction.customId.startsWith('poll_vote_')) {
                 return await interaction.reply({ content: '❌ گیلد هدف یافت نشد.', flags: MessageFlags.Ephemeral });
             }
 
-            if (action === 'approve') {
-                try {
-                    await targetGuild.members.unban(userId, 'Unban approved by staff');
-                } catch (e) {
-                    // Try alternate API
-                    try { await targetGuild.bans.remove(userId, 'Unban approved by staff'); } catch {}
-                }
-
-                let inviteUrl = 'N/A';
-                try {
-                    const channel = targetGuild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(targetGuild.members.me).has('CreateInvite'));
-                    if (channel) {
-                        const invite = await channel.createInvite({ maxUses: 1, maxAge: 86400, reason: `Unban approved for ${userId}` });
-                        inviteUrl = invite.url;
-                    }
-                } catch {}
-
-                const successEmbed = new EmbedBuilder()
-                    .setColor('Green')
-                    .setTitle('✅ درخواست آن‌بن تایید شد')
-                    .setDescription('شما آن‌بن شدید. می‌توانید به سرور بازگردید.')
-                    .addFields(
-                        { name: '🔗 لینک دعوت', value: inviteUrl !== 'N/A' ? `[ورود به سرور](${inviteUrl})` : 'N/A', inline: false },
-                        { name: '🎉 خوش آمدید', value: 'منتظر شما هستیم! قوانین را رعایت کنید.', inline: false }
-                    )
-                    .setTimestamp();
-
-                try {
-                    const userObj = await interaction.client.users.fetch(userId);
-                    await userObj.send({ embeds: [successEmbed] }).catch(() => {});
-                } catch {}
-
-                const updated = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setColor('Green')
-                    .setTitle('✅ اپیل تایید شد');
-                await interaction.update({ embeds: [updated], components: [] });
-
-                appeals[userId] = { ...appeal, status: 'approved', approved_at: Date.now(), approved_by: interaction.user.id };
-                db.moderation.set('server_appeals', appeals);
-
-                if (logger) {
-                    await logger.logInfo('Server Unban Appeal Approved', {
-                        UserId: userId,
-                        ApprovedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                        ApprovedAt: Date.now()
-                    });
-                }
-            } else {
-                const denyDM = new EmbedBuilder()
-                    .setColor('Red')
-                    .setTitle('❌ درخواست آن‌بن رد شد')
-                    .setDescription('اطلاعات کافی نبود. می‌توانید پس از 1 ساعت دوباره درخواست دهید.')
-                    .setTimestamp();
-                try {
-                    const userObj = await interaction.client.users.fetch(userId);
-                    await userObj.send({ embeds: [denyDM] }).catch(() => {});
-                } catch {}
-
-                const updated = EmbedBuilder.from(interaction.message.embeds[0])
-                    .setColor('Red')
-                    .setTitle('❌ اپیل رد شد');
-                await interaction.update({ embeds: [updated], components: [] });
-
-                appeals[userId] = { ...appeal, status: 'denied', denied_at: Date.now(), denied_by: interaction.user.id };
-                db.moderation.set('server_appeals', appeals);
-
-                if (logger) {
-                    await logger.logInfo('Server Unban Appeal Denied', {
-                        UserId: userId,
-                        DeniedBy: `${interaction.user.tag} (${interaction.user.id})`,
-                        DeniedAt: Date.now()
-                    });
-                }
+            // Approve logic
+            try {
+                await targetGuild.members.unban(userId, 'Unban approved by staff');
+            } catch (e) {
+                // Try alternate API
+                try { await targetGuild.bans.remove(userId, 'Unban approved by staff'); } catch {}
             }
 
+            let inviteUrl = 'N/A';
+            try {
+                const channel = targetGuild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(targetGuild.members.me).has('CreateInvite'));
+                if (channel) {
+                    const invite = await channel.createInvite({ maxUses: 1, maxAge: 86400, reason: `Unban approved for ${userId}` });
+                    inviteUrl = invite.url;
+                }
+            } catch {}
+
+            const successEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle('✅ درخواست آن‌بن تایید شد')
+                .setDescription('شما آن‌بن شدید. می‌توانید به سرور بازگردید.')
+                .addFields(
+                    { name: '🔗 لینک دعوت', value: inviteUrl !== 'N/A' ? `[ورود به سرور](${inviteUrl})` : 'N/A', inline: false },
+                    { name: '🎉 خوش آمدید', value: 'منتظر شما هستیم! قوانین را رعایت کنید.', inline: false }
+                )
+                .setTimestamp();
+
+            try {
+                const userObj = await interaction.client.users.fetch(userId);
+                await userObj.send({ embeds: [successEmbed] }).catch(() => {});
+            } catch {}
+
+            const updated = EmbedBuilder.from(interaction.message.embeds[0])
+                .setColor('Green')
+                .setTitle('✅ اپیل تایید شد')
+                .setDescription(`${interaction.message.embeds[0].description || ''}\n\n✅ **تایید شده توسط:** <@${interaction.user.id}> (${interaction.user.tag})`)
+                .setFooter({ text: `تایید در ${new Date(Date.now()).toLocaleString('fa-IR')}` });
+            const disabledButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('approve_disabled').setLabel('✅ تایید شده').setStyle(ButtonStyle.Success).setDisabled(true),
+                new ButtonBuilder().setCustomId('deny_disabled').setLabel('❌ رد شد').setStyle(ButtonStyle.Danger).setDisabled(true)
+            );
+            await interaction.update({ embeds: [updated], components: [disabledButtons] });
+
+            appeals[userId] = { ...appeal, status: 'approved', approved_at: Date.now(), approved_by: interaction.user.id };
+            db.moderation.set('server_appeals', appeals);
+
+            if (logger) {
+                await logger.logInfo('Server Unban Appeal Approved', {
+                    UserId: userId,
+                    ApprovedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                    ApprovedAt: Date.now()
+                });
+            }
         } catch (error) {
-            console.error('Error handling server unban appeal decision:', error);
+            console.error('Error handling server unban appeal approval:', error);
             await interaction.reply({ content: '❌ خطا در پردازش تصمیم اپیل.', flags: MessageFlags.Ephemeral });
         }
         return;
+    }
+
+    if (interaction.customId.startsWith('server_unban_deny_')) {
+        if (!interaction.member || !interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await interaction.reply({ content: '❌ شما دسترسی لازم برای مدیریت اپیل را ندارید.', flags: MessageFlags.Ephemeral });
+        }
+
+        const parts = interaction.customId.split('_');
+        const userId = parts[3];
+
+        try {
+            const appeals = db.moderation.get('server_appeals') || {};
+            const appeal = appeals[userId];
+            if (!appeal || appeal.status !== 'pending') {
+                return await interaction.reply({ content: '❌ اپیل معتبر یافت نشد یا قبلاً رسیدگی شده است.', flags: MessageFlags.Ephemeral });
+            }
+
+            // Show modal for rejection reason
+            const modal = new ModalBuilder()
+                .setCustomId(`unban_deny_modal_${userId}`)
+                .setTitle('دلیل رد درخواست آن‌بن')
+                .addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('deny_reason')
+                            .setLabel('دلیل رد درخواست (اختیاری)')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setRequired(false)
+                            .setMaxLength(1000)
+                            .setPlaceholder('اگر چیزی ننویسید، یک پیام پیشفرض ارسال خواهد شد.')
+                    )
+                );
+
+            await interaction.showModal(modal);
+            return;
+        } catch (error) {
+            console.error('Error showing deny modal:', error);
+            await interaction.reply({ content: '❌ خطا در نمایش مودال.', flags: MessageFlags.Ephemeral });
+        }
     }
 
     // Handle advertisement buttons
@@ -1492,13 +1282,67 @@ if (interaction.customId.startsWith('poll_vote_')) {
         }
     }
     else {
+        if (customId && customId.startsWith('request_unban_')) {
+            const userId = customId.split('_')[2];
+            if (interaction.user.id !== userId) {
+                return await interaction.reply({ content: '❌ فقط خودتان می‌توانید درخواست آن‌بن ثبت کنید.', flags: MessageFlags.Ephemeral });
+            }
+
+            const appeals = db.moderation.get('server_appeals') || {};
+            const existing = appeals[userId];
+            const now = Date.now();
+            const ONE_HOUR = 60 * 60 * 1000;
+            if (existing) {
+                if (existing.status === 'pending') {
+                    return await interaction.reply({ content: '⏳ درخواست قبلی شما در حال بررسی است.', flags: MessageFlags.Ephemeral });
+                }
+                if (existing.status === 'denied' && (now - (existing.denied_at || 0)) < ONE_HOUR) {
+                    const remaining = Math.ceil((ONE_HOUR - (now - existing.denied_at)) / (60 * 1000));
+                    return await interaction.reply({ content: `⏳ لطفاً ${remaining} دقیقه دیگر دوباره تلاش کنید.`, flags: MessageFlags.Ephemeral });
+                }
+            }
+
+            const modal = new ModalBuilder()
+                .setCustomId(`server_unban_modal_${userId}`)
+                .setTitle('درخواست آن‌بن سرور')
+                .addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('ban_time')
+                            .setLabel('ساعت تقریبی بن شدن')
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('یکی از موارد: آخرین 1 ساعت | امروز | دیروز | هفته اخیر | نامشخص')
+                            .setRequired(true)
+                            .setMaxLength(20)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('justification')
+                            .setLabel('چرا فکر می‌کنید بن اشتباه بوده؟')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setRequired(true)
+                            .setMaxLength(1000)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('prior_warnings')
+                            .setLabel('آیا قبلاً اخطار داشتید؟ (بله/خیر/نامشخص)')
+                            .setStyle(TextInputStyle.Short)
+                            .setRequired(false)
+                            .setMaxLength(20)
+                    )
+                );
+
+            await interaction.showModal(modal);
+            return;
+        }
         // Handle unknown button
         // Check if interaction is already replied/deferred
         if (interaction.replied || interaction.deferred) {
             return;
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        console.log(`Unknown button clicked: customId='${interaction.customId}', user='${interaction.user.id}', guild='${interaction.guild.id}'`);
+        console.log(`Unknown button clicked: customId='${interaction.customId}', user='${interaction.user.id}', guild='${interaction.guild?.id || 'DM'}'`);
         const errorEmbed = new EmbedBuilder()
             .setColor('Red')
             .setDescription(`❌ دکمه نامشخص: ${customId}`);
@@ -1547,76 +1391,48 @@ async function handleSelectMenu(interaction, client, env) {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
-        // Check if user is banned from support
-        const supportBans = db.support.get('bans') || [];
-        const activeBan = supportBans.find(ban => ban.user_id === user.id && ban.status === 'active');
-        
-        if (activeBan) {
-            // Check if ban has expired (for temporary bans)
-            if (activeBan.expires_at && activeBan.expires_at < Date.now()) {
-                // Auto-unban expired temporary ban
-                activeBan.status = 'expired';
-                activeBan.expired_at = Date.now();
-                
-                // Update ban in database
-                const banIndex = supportBans.findIndex(ban => ban.user_id === user.id);
-                if (banIndex !== -1) {
-                    supportBans[banIndex] = activeBan;
-                    db.support.set('bans', supportBans);
-                }
-                
-                // Log auto-unban
-                if (logger) {
-                    await logger.logInfo('Auto-Unban', {
-                        User: `${user.tag} (${user.id})`,
-                        BanDuration: activeBan.duration,
-                        ExpiredAt: Date.now()
-                    });
-                }
-                
-                // Continue with ticket creation (ban expired)
+        // Check if user is banned from the server
+        let isBanned = false;
+        try {
+            const banList = await interaction.guild.bans.fetch();
+            isBanned = banList.has(user.id);
+        } catch (error) {
+            console.log('Could not check ban status:', error.message);
+        }
+
+        if (isBanned) {
+            const bannedEmbed = new EmbedBuilder()
+                .setColor('Red')
+                .setTitle('🚫 Access Denied')
+                .setDescription('You are currently banned from the server.')
+                .addFields(
+                    { name: '📋 Appeal Process', value: 'If you believe this ban was made in error, you can request an unban by clicking the button below.', inline: false },
+                    { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
+                )
+                .setTimestamp();
+
+            // Check if user can appeal (not denied recently)
+            const appeals = db.moderation.get('server_appeals') || {};
+            const userAppeal = appeals[user.id];
+
+            let canAppeal = true;
+            if (userAppeal && userAppeal.status === 'denied') {
+                const timeSinceDenial = Date.now() - userAppeal.denied_at;
+                const oneHour = 60 * 60 * 1000;
+                canAppeal = timeSinceDenial >= oneHour;
+            }
+
+            if (canAppeal) {
+                const appealButton = new ButtonBuilder()
+                    .setCustomId(`request_unban_${user.id}`)
+                    .setLabel('Request Unban')
+                    .setStyle(ButtonStyle.Primary);
+
+                const actionRow = new ActionRowBuilder().addComponents(appealButton);
+                return interaction.editReply({ embeds: [bannedEmbed], components: [actionRow] });
             } else {
-                // User is still banned
-                const remainingTime = activeBan.expires_at ? 
-                    `<t:${Math.floor(activeBan.expires_at / 1000)}:R>` : 
-                    'Permanent';
-                
-                const bannedEmbed = new EmbedBuilder()
-                    .setColor('Red')
-                    .setTitle('🚫 Support Access Denied')
-                    .setDescription('You are currently banned from creating support tickets.')
-                    .addFields(
-                        { name: '⏱️ Ban Duration', value: activeBan.duration === 'permanent' ? 'Permanent' : remainingTime, inline: true },
-                        { name: '📝 Reason', value: activeBan.reason, inline: true },
-                        { name: '📋 Appeal Process', value: 'If you believe this ban was made in error, you can request an appeal by clicking the button below.', inline: false },
-                        { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
-                    )
-                    .setFooter({ text: `Banned by ${activeBan.banned_by}` })
-                    .setTimestamp();
-
-                // Check if user can appeal (not denied recently)
-                const appeals = db.support.get('appeals') || {};
-                const userAppeal = appeals[user.id];
-                
-                let canAppeal = true;
-                if (userAppeal && userAppeal.status === 'denied') {
-                    const timeSinceDenial = Date.now() - userAppeal.denied_at;
-                    const oneHour = 60 * 60 * 1000;
-                    canAppeal = timeSinceDenial >= oneHour;
-                }
-
-                if (canAppeal) {
-                    const appealButton = new ButtonBuilder()
-                        .setCustomId(`appeal_support_ban_${user.id}`)
-                        .setLabel('Request Appeal')
-                        .setStyle(ButtonStyle.Primary);
-
-                    const actionRow = new ActionRowBuilder().addComponents(appealButton);
-                    return interaction.editReply({ embeds: [bannedEmbed], components: [actionRow] });
-                } else {
-                    // Remove appeal button if cooldown active
-                    return interaction.editReply({ embeds: [bannedEmbed], components: [] });
-                }
+                // Remove appeal button if cooldown active
+                return interaction.editReply({ embeds: [bannedEmbed], components: [] });
             }
         }
         
@@ -1734,121 +1550,7 @@ async function handleModal(interaction, client, env) {
         }
     };
 
-    // --- support_appeal_modal_ ---
-    if (customId.startsWith('support_appeal_modal_')) {
-        const userId = customId.split('_')[3];
-        
-        // Check if this user is submitting their own appeal
-        if (user.id !== userId) {
-            return await interaction.editReply({ 
-                content: '❌ You can only submit your own appeal.', 
-                flags: MessageFlags.Ephemeral 
-            });
-        }
 
-        try {
-            const appealReason = fields.getTextInputValue('appeal_reason');
-            const additionalInfo = fields.getTextInputValue('additional_info');
-
-            // Get support ban channel from config
-            const supportBanChannelId = config.channels.banSupport;
-            if (!supportBanChannelId) {
-                return await interaction.editReply({ 
-                    content: '❌ Support ban channel not configured.', 
-                    flags: MessageFlags.Ephemeral 
-                });
-            }
-
-            const supportBanChannel = guild.channels.cache.get(supportBanChannelId);
-            if (!supportBanChannel || !supportBanChannel.isTextBased()) {
-                return await interaction.editReply({ 
-                    content: '❌ Support ban channel not found or is not a text channel.', 
-                    flags: MessageFlags.Ephemeral 
-                });
-            }
-
-            // Store appeal in database
-            const appeals = db.support.get('appeals') || {};
-            appeals[userId] = {
-                user_id: userId,
-                user_tag: user.tag,
-                reason: appealReason,
-                additional_info: additionalInfo,
-                submitted_at: Date.now(),
-                status: 'pending'
-            };
-            db.support.set('appeals', appeals);
-
-            // Create appeal embed for staff review
-            const appealEmbed = new EmbedBuilder()
-                .setColor('Yellow')
-                .setTitle('📝 Support Ban Appeal Request')
-                .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-                .addFields(
-                    { name: '👤 User', value: `${user.tag} (${user.id})`, inline: true },
-                    { name: '📅 Submitted', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
-                    { name: '📋 Appeal Reason', value: appealReason, inline: false }
-                )
-                .setTimestamp();
-
-            if (additionalInfo) {
-                appealEmbed.addFields({
-                    name: 'ℹ️ Additional Information', 
-                    value: additionalInfo, 
-                    inline: false 
-                });
-            }
-
-            // Add approval/rejection buttons
-            const approveButton = new ButtonBuilder()
-                .setCustomId(`approve_appeal_${userId}`)
-                .setLabel('✅ Approve Appeal')
-                .setStyle(ButtonStyle.Success);
-
-            const denyButton = new ButtonBuilder()
-                .setCustomId(`deny_appeal_${userId}`)
-                .setLabel('❌ Deny Appeal')
-                .setStyle(ButtonStyle.Danger);
-
-            const actionRow = new ActionRowBuilder().addComponents(approveButton, denyButton);
-
-            // Send to support ban channel
-            await supportBanChannel.send({ 
-                embeds: [appealEmbed], 
-                components: [actionRow] 
-            });
-
-            // Confirm to user
-            const confirmEmbed = new EmbedBuilder()
-                .setColor('Green')
-                .setTitle('✅ Appeal Submitted')
-                .setDescription('Your support ban appeal has been submitted for review.')
-                .addFields(
-                    { name: '📝 Status', value: 'Pending review by staff', inline: true },
-                    { name: '⏱️ Response Time', value: 'Staff will review your appeal shortly', inline: true }
-                )
-                .setFooter({ text: 'You will be notified of the decision' })
-                .setTimestamp();
-
-            await interaction.editReply({ embeds: [confirmEmbed] });
-
-            if (logger) {
-                await logger.logInfo('Support Appeal Submitted', {
-                    User: `${user.tag} (${user.id})`,
-                    AppealReason: appealReason.substring(0, 100),
-                    SubmittedAt: Date.now()
-                });
-            }
-
-        } catch (error) {
-            console.error('Error submitting appeal:', error);
-            await interaction.editReply({ 
-                content: '❌ Error submitting appeal. Please try again later.', 
-                flags: MessageFlags.Ephemeral 
-            });
-        }
-        return;
-    }
 
     if (customId.startsWith('server_unban_modal_')) {
         const userId = customId.split('_')[3];
@@ -2004,6 +1706,82 @@ async function handleModal(interaction, client, env) {
         return;
     }
 
+    if (customId.startsWith('unban_deny_modal_')) {
+        await ensureDefer();
+
+        const userId = customId.split('_')[3];
+        const denyReason = fields.getTextInputValue('deny_reason') || '';
+
+        // Check permission and appeal validity (redundant but safe)
+        if (!interaction.member || !interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+            return await interaction.editReply({ content: '❌ شما دسترسی لازم برای مدیریت اپیل را ندارید.', flags: MessageFlags.Ephemeral });
+        }
+
+        const appeals = db.moderation.get('server_appeals') || {};
+        const appeal = appeals[userId];
+        if (!appeal || appeal.status !== 'pending') {
+            return await interaction.editReply({ content: '❌ اپیل معتبر یافت نشد یا قبلاً رسیدگی شده است.', flags: MessageFlags.Ephemeral });
+        }
+
+        const defaultDenyReason = 'اطلاعات کافی نبود. می‌توانید پس از 1 ساعت دوباره درخواست دهید.';
+        const finalDenyReason = denyReason.trim() || defaultDenyReason;
+
+        // Send deny message to user FIRST (always attempt this)
+        const denyDM = new EmbedBuilder()
+            .setColor('Red')
+            .setTitle('❌ درخواست آن‌بن رد شد')
+            .setDescription(finalDenyReason)
+            .setTimestamp();
+
+        let dmSent = false;
+        try {
+            const userObj = await interaction.client.users.fetch(userId);
+            await userObj.send({ embeds: [denyDM] }).catch(() => {});
+            dmSent = true;
+        } catch {}
+
+        // Now try to update the embed and database (don't fail if this doesn't work)
+        try {
+            // Update the appeal embed
+            const updated = EmbedBuilder.from(interaction.message.embeds[0])
+                .setColor('Red')
+                .setTitle('❌ اپیل رد شد')
+                .setDescription(`${interaction.message.embeds[0].description || ''}\n\n❌ **رد شده توسط:** <@${interaction.user.id}> (${interaction.user.tag})\n📝 **دلیل رد:** ${finalDenyReason}`)
+                .setFooter({ text: `رد در ${new Date(Date.now()).toLocaleString('fa-IR')}` });
+
+            const disabledButtons = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('approve_disabled').setLabel('✅ تایید شده').setStyle(ButtonStyle.Success).setDisabled(true),
+                new ButtonBuilder().setCustomId('deny_disabled').setLabel('❌ رد شد').setStyle(ButtonStyle.Danger).setDisabled(true)
+            );
+
+            await interaction.update({ embeds: [updated], components: [disabledButtons] });
+
+            // Update appeal status in database
+            appeals[userId] = { ...appeal, status: 'denied', denied_at: Date.now(), denied_by: interaction.user.id, deny_reason: finalDenyReason };
+            db.moderation.set('server_appeals', appeals);
+
+            if (logger) {
+                await logger.logInfo('Server Unban Appeal Denied', {
+                    UserId: userId,
+                    DeniedBy: `${interaction.user.tag} (${interaction.user.id})`,
+                    DeniedAt: Date.now(),
+                    DenyReason: finalDenyReason,
+                    DMSent: dmSent
+                });
+            }
+
+            await interaction.editReply({ content: '✅ درخواست آن‌بن با موفقیت رد شد و پیام به کاربر ارسال گردید.', flags: MessageFlags.Ephemeral });
+        } catch (error) {
+            console.error('Error updating appeal embed/database:', error);
+            // Even if embed/database update fails, the DM was sent, so inform the admin
+            await interaction.editReply({
+                content: `⚠️ درخواست رد شد اما خطا در بروزرسانی رابط کاربری رخ داد. با این حال پیام رد به کاربر ارسال شد.`,
+                flags: MessageFlags.Ephemeral
+            });
+        }
+        return;
+    }
+
     if (customId.startsWith('review_comment_modal_')) {
         try {
 
@@ -2150,7 +1928,7 @@ async function handleModal(interaction, client, env) {
 
             const successEmbed = new EmbedBuilder()
                 .setColor('Green')
-                .setDescription(`تیکت شما با موفقیت ساخته شد!\n\nتیکت شما با جزئیات کامل ایجاد شد. برای دسترسی سریع به تیکت، روی لینک زیر کلیک کنید:\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
+                .setDescription(`تیکت شما با موفقیت ساخته شد!\n\n[🚀 رفتن به تیکت](https://discord.com/channels/${guild.id}/${ticketChannelId})`);
 
             await interaction.editReply({ embeds: [successEmbed] });
 

@@ -67,6 +67,7 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildBans,
     ],
     partials: [
         Partials.Message, 
@@ -195,12 +196,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 if (interaction.replied || interaction.deferred) {
                     await interaction.followUp({ 
                         content: securityCheck.message || 'Access denied',
-                        flags: MessageFlags.Ephemeral
+                        ephemeral: true
                     });
                 } else {
                     await interaction.reply({ 
                         content: securityCheck.message || 'Access denied',
-                        flags: MessageFlags.Ephemeral
+                        ephemeral: true
                     });
                 }
                 return;
@@ -231,13 +232,13 @@ utils.setClient(client);
 utils.setLogger(logger);
 commands.setLogger(logger);
 
-// تنظیمات Events Handler
+// Events Handler Settings
 events.setLogger(logger);
 if (securityManager) {
     commands.setSecurity(securityManager);
     handlers.setSecurity(securityManager);
     
-    // ✅ اضافه کردن سکیوریتی منیجر به ایونت‌ها
+    // ✅ Adding security manager to events
     events.setSecurity(securityManager);
 }
 handlers.setLogger(logger);
@@ -277,7 +278,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 // Event: Guild Member Remove
 client.on(Events.GuildMemberRemove, async (member) => {
     try {
-        await events.onGuildMemberRemove(member);
+        await events.onGuildMemberRemove(member, client, env);
         
         await logger.logInfo('Member Left', {
             User: `${member.user.tag} (${member.user.id})`,
@@ -356,7 +357,7 @@ process.on('uncaughtException', async error => {
 });
 
 const transcript = require('./src/utils/transcript');
-// پاکسازی هر 24 ساعت
+// Clean up every 24 hours
 setInterval(() => {
     transcript.cleanupOldTranscripts();
 }, 24 * 60 * 60 * 1000);

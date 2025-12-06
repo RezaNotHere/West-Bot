@@ -255,21 +255,21 @@ async function sendWarningDM(member, warningCount, maxWarnings, reason, moderato
         
         const warningEmbed = new EmbedBuilder()
             .setColor(warningCount >= maxWarnings ? (colors.error || '#e74c3c') : (colors.warning || '#f39c12'))
-            .setTitle(warningCount >= maxWarnings 
-                ? (warningMessages.banned || '🔨 شما از سرور بن شدید') 
-                : (warningMessages.warned || '⚠️ اخطار از مدیریت سرور'))
-            .setDescription(warningCount >= maxWarnings 
-                ? `شما به دلیل دریافت ${maxWarnings} اخطار از سرور حذف شدید.`
-                : `شما یک اخطار از مدیریت سرور دریافت کردید.`
+            .setTitle(warningCount >= maxWarnings
+                ? (warningMessages.banned || '🔨 You have been banned from the server')
+                : (warningMessages.warned || '⚠️ Warning from server management'))
+            .setDescription(warningCount >= maxWarnings
+                ? `You have been banned from the server for receiving ${maxWarnings} warnings.`
+                : `You have received a warning from server management.`
             )
             .addFields(
-                { name: 'تعداد اخطارها', value: `${warningCount} از ${maxWarnings}`, inline: true },
-                { name: 'دلیل اخطار', value: reason, inline: true },
-                { name: 'اعلام کننده', value: moderator.tag, inline: true }
+                { name: 'Number of warnings', value: `${warningCount} of ${maxWarnings}`, inline: true },
+                { name: 'Warning reason', value: reason, inline: true },
+                { name: 'Announcer', value: moderator.tag, inline: true }
             )
-            .setFooter({ text: warningCount >= maxWarnings 
-                ? 'دسترسی شما به سرور قطع شد' 
-                : 'لطفاً قوانین سرور را رعایت کنید'
+            .setFooter({ text: warningCount >= maxWarnings
+                ? 'Your access to the server has been cut off'
+                : 'Please follow the server rules'
             })
             .setTimestamp();
 
@@ -470,19 +470,19 @@ async function getHypixelData(uuid, apiKey) {
 
 function getCapeTypeName(capeUrl) {
     if (capeUrl.includes('minecraft.net')) {
-        if (capeUrl.includes('migrator')) return '🌟 کیپ مهاجرت موجانگ';
-        if (capeUrl.includes('scrolls')) return '📜 کیپ Scrolls';
-        if (capeUrl.includes('translator')) return '🌍 کیپ مترجم موجانگ';
-        if (capeUrl.includes('cobalt')) return '💠 کیپ Cobalt';
-        if (capeUrl.includes('mojang')) return '⭐ کیپ کارمند موجانگ';
+        if (capeUrl.includes('migrator')) return '🌟 Mojang Migration Cape';
+        if (capeUrl.includes('scrolls')) return '📜 Scrolls Cape';
+        if (capeUrl.includes('translator')) return '🌍 Mojang Translator Cape';
+        if (capeUrl.includes('cobalt')) return '💠 Cobalt Cape';
+        if (capeUrl.includes('mojang')) return '⭐ Mojang Employee Cape';
         if (capeUrl.includes('minecon')) {
             const year = capeUrl.match(/201[0-9]/);
-            return `🎪 کیپ MineCon ${year ? year[0] : ''}`;
+            return `🎪 MineCon Cape ${year ? year[0] : ''}`;
         }
-        return '🌟 کیپ رسمی موجانگ';
+        return '🌟 Official Mojang Cape';
     }
-    if (capeUrl.includes('optifine')) return '🎭 کیپ OptiFine';
-    return '🧥 کیپ ناشناخته';
+    if (capeUrl.includes('optifine')) return '🎭 OptiFine Cape';
+    return '🧥 Unknown Cape';
 }
 
 function getHypixelRanks(player) {
@@ -684,6 +684,22 @@ function getButtonStyle(styleName) {
 
 // --- Ticket System ---
 
+function getCategoryNameForReason(reason) {
+    // Get category from config
+    const ticketConfig = config.ticketSystem;
+    const category = ticketConfig?.menu?.categories?.find(cat => cat.value === reason);
+
+    // If found, create category name with emoji prefix + label (minus any existing emoji)
+    if (category && category.label) {
+        // Remove any existing emojis from the label to avoid duplication
+        const cleanLabel = category.label.replace(/[^\w\s-]/g, '').trim();
+        return `🎫${cleanLabel}`;
+    }
+
+    // Fallback
+    return '🎫Tickets';
+}
+
 async function ensureTicketCategory(guild, categoryName) {
     let category = guild.channels.cache.find(c => c.name === categoryName && c.type === 4); // 4 = GUILD_CATEGORY
     if (!category) {
@@ -705,19 +721,11 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
     const SUPPORT_ROLE_ID = config.roles?.ticketAccess;
     if (!SUPPORT_ROLE_ID) throw new Error('Ticket access role ID (config.roles.ticketAccess) not configured');
 
-    // ۲. پیدا کردن یا ساختن کتگوری (Category)
-    // اصلاح: دیگر سعی نمی‌کند با ID رول، کتگوری را پیدا کند.
-    let category;
-    
-    // اگر در کانفیگ ID کتگوری گذاشته باشید (اختیاری)
-    if (ticketConfig.categoryId) {
-        category = guild.channels.cache.get(ticketConfig.categoryId);
-    }
-    
-    // اگر کتگوری پیدا نشد، یکی جدید با نام مشخص شده میسازد یا پیدا می‌کند
-    if (!category) {
-        category = await ensureTicketCategory(guild, ticketConfig.categoryName);
-    }
+    // ۲. تعیین نام کتگوری بر اساس نوع تیکت
+    const categoryName = getCategoryNameForReason(reason);
+
+    // ۳. پیدا کردن یا ساختن کتگوری بر اساس نوع تیکت
+    let category = await ensureTicketCategory(guild, categoryName);
 
     const ticketNumber = (guild.channels.cache.filter(ch => ch.name.startsWith('ticket-')).size) + 1;
     const channelName = ticketConfig.channelNameTemplate.replace('{username}', user.username).replace('{number}', ticketNumber);
@@ -758,6 +766,7 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
             { name: 'Ticket ID', value: `#${ticketNumber}`, inline: true },
             { name: 'Created At', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
         )
+        .setThumbnail(guild.iconURL())
         .setFooter({ text: guild.name, iconURL: guild.iconURL() })
         .setTimestamp();
 
@@ -797,8 +806,11 @@ async function createTicketChannel(guild, user, reason, additionalDetails = '') 
         additionalDetails: additionalDetails || ''
     });
 
+    // ذخیره Channel ID برای امکان بازگشت به تیکت
+    db.tickets.set(user.id, ticketChannel.id);
+
     await logAction(guild, `🎟️ New ticket created for ${user.tag} with subject "${finalReason}". <#${ticketChannel.id}>`);
-    
+
     return ticketChannel;
 }
 
@@ -811,26 +823,52 @@ async function updateShopStatus(client, guild) {
     // Add real shop status logic here (e.g. updating channel stats)
 }
 
+// Active giveaway timers to prevent duplicate processing
+const activeGiveawayTimers = new Set();
+
 async function checkGiveaways() {
     if (db.giveaways.size === 0) return;
     for (const messageId of db.giveaways.keys()) {
         const giveaway = db.giveaways.get(messageId);
         if (!giveaway || giveaway.ended) continue;
+
         const now = Date.now();
         const remainingTime = giveaway.endTime - now;
+
+        // If giveaway has already ended, immediately process it
         if (remainingTime <= 0) {
-            await endGiveaway(messageId);
+            // Check if already being processed to prevent duplicate calls
+            if (!activeGiveawayTimers.has(messageId)) {
+                activeGiveawayTimers.add(messageId);
+                await endGiveaway(messageId);
+                activeGiveawayTimers.delete(messageId);
+            }
         } else {
-            const delay = Number.isFinite(remainingTime) && remainingTime > 0 ? remainingTime : 0;
-            setTimeout(() => endGiveaway(messageId), delay);
+            // For future giveaways, set a timer only if not already set
+            if (!activeGiveawayTimers.has(messageId)) {
+                const delay = Math.min(remainingTime, 2147483647); // Max timer delay
+                activeGiveawayTimers.add(messageId);
+                setTimeout(async () => {
+                    await endGiveaway(messageId);
+                    activeGiveawayTimers.delete(messageId);
+                }, delay);
+            }
         }
     }
 }
 
 async function endGiveaway(messageId) {
-    if (!client) return; 
+    if (!client) return;
     const giveaway = db.giveaways.get(messageId);
     if (!giveaway || giveaway.ended) return;
+
+    // Double-check if giveaway is being processed to prevent race conditions
+    if (activeGiveawayTimers.has(messageId)) {
+        return; // Already being processed
+    }
+
+    // Mark as being processed immediately
+    activeGiveawayTimers.add(messageId);
     const channel = client.channels.cache.get(giveaway.channelId);
     if (!channel) return db.giveaways.delete(messageId);
     const message = await channel.messages.fetch(messageId).catch(() => null);

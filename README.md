@@ -221,8 +221,8 @@ node index.js
 
 ### Step 1: Clone Repository
 ```bash
-git clone <repository-url>
-cd <project-directory>
+git clone https://github.com/RezaNotHere/West-Bot.git
+cd West-Bot
 ```
 
 ### Step 2: Install Dependencies

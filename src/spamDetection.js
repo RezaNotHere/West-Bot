@@ -1,5 +1,4 @@
 // spamDetection.js
-const db = require('./database');
 
 // Store message timestamps for spam detection
 const messageTimestamps = new Map();

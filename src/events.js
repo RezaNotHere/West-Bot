@@ -1,6 +1,6 @@
 // src/events.js
-const { EmbedBuilder } = require('discord.js');
-const db = require('./database');
+const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { db } = require('./database');
 const utils = require('./utils');
 const config = require('../configManager');
 //const spamDetection = require('./spamDetection');
@@ -53,8 +53,35 @@ async function onMessageCreate(message, client) {
                             .setColor('Red')
                             .setTitle('Banned from Server')
                             .setDescription('You have been automatically banned for receiving 3 warnings.')
+                            .addFields(
+                                { name: '📋 Appeal Process', value: 'If you believe this ban was made in error, you can request an unban by clicking the button below.', inline: false },
+                                { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
+                            )
                             .setTimestamp();
-                        await message.author.send({ embeds: [banDmEmbed] });
+
+                        // Check if user can appeal (not denied recently)
+                        const appeals = db.moderation.get('server_appeals') || {};
+                        const userAppeal = appeals[message.author.id];
+
+                        let canAppeal = true;
+                        if (userAppeal && userAppeal.status === 'denied') {
+                            const timeSinceDenial = Date.now() - userAppeal.denied_at;
+                            const oneHour = 60 * 60 * 1000;
+                            canAppeal = timeSinceDenial >= oneHour;
+                        }
+
+                        if (canAppeal) {
+                            const appealButton = new ButtonBuilder()
+                                .setCustomId(`request_unban_${message.author.id}`)
+                                .setLabel('Request Unban')
+                                .setStyle(ButtonStyle.Primary);
+
+                            const actionRow = new ActionRowBuilder().addComponents(appealButton);
+                            await message.author.send({ embeds: [banDmEmbed], components: [actionRow] });
+                        } else {
+                            // Remove appeal button if cooldown active
+                            await message.author.send({ embeds: [banDmEmbed] });
+                        }
                     } catch (e) {}
 
                     // انجام بن
@@ -72,6 +99,13 @@ async function onMessageCreate(message, client) {
                     }
                 } catch (banError) {
                     console.error('Failed to auto-ban user:', banError);
+                    if (logger) {
+                        await logger.logError(banError, 'Auto-Ban Failed', {
+                            User: message.author.tag,
+                            Reason: 'Missing permissions or API error',
+                            Guild: message.guild.name
+                        });
+                    }
                 }
                 return; // توقف پردازش
             }

@@ -340,7 +340,7 @@ async function handleSlashCommand(interaction) {
                 .setTimestamp();
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            await InteractionUtils.sendError(interaction, 'خطا در دریافت اطلاعات دعوت‌ها.', true);
+            await InteractionUtils.sendError(interaction, 'Error fetching invite information.', true);
         }
         return;
     }
@@ -414,12 +414,12 @@ async function handleSlashCommand(interaction) {
             const endTime = Date.now() + durationMs;
             const embed = new EmbedBuilder()
                 .setColor('#FFD700')
-                .setTitle('🎉 گیوای سرور!')
-                .setDescription(`بر شرکت در گیوای روی 🎉 کلیک کنید!\n\n**جایزه:** ${sanitizedPrize}\n**برندگان:** ${sanitizedWinners}\n**پایان:** <t:${Math.floor(endTime/1000)}:R>\n👤 میزبان: <@${interaction.user.id}>\n\n👥 شرکت‌کننده تا این لحظه: **0 نفر**`)
-                .setFooter({ text: 'بر شرکت در گیوای روی دکمه زیر کلیک کنید.' })
+                .setTitle('🎉 Server Giveaway!')
+                .setDescription(`Click on 🎉 to participate in the giveaway!\n\n**Prize:** ${sanitizedPrize}\n**Winners:** ${sanitizedWinners}\n**Ends:** <t:${Math.floor(endTime/1000)}:R>\n👤 Host: <@${interaction.user.id}>\n\n👥 Participants so far: **0 people**`)
+                .setFooter({ text: 'Click on the button below to participate in the giveaway.' })
                 .setTimestamp();
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('join_giveaway').setLabel('شرکت در گیوای').setStyle(ButtonStyle.Success).setEmoji('🎉')
+                new ButtonBuilder().setCustomId('join_giveaway').setLabel('Join Giveaway').setStyle(ButtonStyle.Success).setEmoji('🎉')
             );
             const msg = await channel.send({ embeds: [embed], components: [row] });
             
@@ -548,7 +548,7 @@ async function handleSlashCommand(interaction) {
             }
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            await InteractionUtils.sendError(interaction, 'خطا در دریافت آمار رول‌ها.', true);
+            await InteractionUtils.sendError(interaction, 'Error fetching role statistics.', true);
         }
         return;
     }
@@ -589,7 +589,7 @@ async function handleSlashCommand(interaction) {
             }
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            await InteractionUtils.sendError(interaction, 'خطا در دریافت اطلاعات دعوت‌ها.', true);
+            await InteractionUtils.sendError(interaction, 'Error fetching invite information.', true);
         }
         return;
     }
@@ -714,9 +714,36 @@ async function handleSlashCommand(interaction) {
                             const banEmbed = new EmbedBuilder()
                                 .setColor(0xFF0000)
                                 .setTitle('Banned from Server')
-                                .setDescription('You have been banned from the server for receiving 3 warnings. Contact an admin for more information.')
+                                .setDescription('You have been banned from the server for receiving 3 warnings.')
+                                .addFields(
+                                    { name: '📋 Appeal Process', value: 'If you believe this ban was made in error, you can request an unban by clicking the button below.', inline: false },
+                                    { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
+                                )
                                 .setTimestamp();
-                            await targetUser.send({ embeds: [banEmbed] });
+
+                            // Check if user can appeal (not denied recently)
+                            const appeals = db.moderation.get('server_appeals') || {};
+                            const userAppeal = appeals[targetUser.id];
+
+                            let canAppeal = true;
+                            if (userAppeal && userAppeal.status === 'denied') {
+                                const timeSinceDenial = Date.now() - userAppeal.denied_at;
+                                const oneHour = 60 * 60 * 1000;
+                                canAppeal = timeSinceDenial >= oneHour;
+                            }
+
+                            if (canAppeal) {
+                                const appealButton = new ButtonBuilder()
+                                    .setCustomId(`request_unban_${targetUser.id}`)
+                                    .setLabel('Request Unban')
+                                    .setStyle(ButtonStyle.Primary);
+
+                                const actionRow = new ActionRowBuilder().addComponents(appealButton);
+                                await targetUser.send({ embeds: [banEmbed], components: [actionRow] });
+                            } else {
+                                // Remove appeal button if cooldown active
+                                await targetUser.send({ embeds: [banEmbed] });
+                            }
                         } catch (dmError) {
                             console.error('Failed to send ban DM:', dmError);
                         }
@@ -955,7 +982,7 @@ async function handleSlashCommand(interaction) {
 
         try {
             const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-            
+
             if (member && (member.permissions.has('BanMembers') || member.permissions.has('Administrator') || member.id === interaction.guild.ownerId)) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor('Red')
@@ -970,11 +997,50 @@ async function handleSlashCommand(interaction) {
                 return interaction.editReply({ embeds: [errorEmbed] });
             }
 
-            await interaction.guild.members.ban(targetUser.id, { 
+            await interaction.guild.members.ban(targetUser.id, {
                 reason: reason,
-                deleteMessageSeconds: deleteDays * 86400 
+                deleteMessageSeconds: deleteDays * 86400
             });
-            
+
+            // Send DM to banned user with appeal button
+            try {
+                const banEmbed = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('Banned from Server')
+                    .setDescription(`You have been banned from **${interaction.guild.name}** for: **${reason}**`)
+                    .addFields(
+                        { name: '📋 Appeal Process', value: 'If you believe this ban was made in error, you can request an unban by clicking the button below.', inline: false },
+                        { name: '⏰ Next Attempt', value: 'You can submit another appeal request in 1 hour if your previous request was denied.', inline: false }
+                    )
+                    .setTimestamp();
+
+                // Check if user can appeal (not denied recently)
+                const appeals = db.moderation.get('server_appeals') || {};
+                const userAppeal = appeals[targetUser.id];
+
+                let canAppeal = true;
+                if (userAppeal && userAppeal.status === 'denied') {
+                    const timeSinceDenial = Date.now() - userAppeal.denied_at;
+                    const oneHour = 60 * 60 * 1000;
+                    canAppeal = timeSinceDenial >= oneHour;
+                }
+
+                if (canAppeal) {
+                    const appealButton = new ButtonBuilder()
+                        .setCustomId(`request_unban_${targetUser.id}`)
+                        .setLabel('Request Unban')
+                        .setStyle(ButtonStyle.Primary);
+
+                    const actionRow = new ActionRowBuilder().addComponents(appealButton);
+                    await targetUser.send({ embeds: [banEmbed], components: [actionRow] });
+                } else {
+                    // Remove appeal button if cooldown active
+                    await targetUser.send({ embeds: [banEmbed] });
+                }
+            } catch (dmError) {
+                console.error('Failed to send ban DM:', dmError);
+            }
+
             const successEmbed = new EmbedBuilder()
                 .setColor('Red')
                 .setTitle('🔨 User Banned')
@@ -987,7 +1053,7 @@ async function handleSlashCommand(interaction) {
 
             await interaction.editReply({ embeds: [successEmbed] });
             await utils.logAction(interaction.guild, `🔨 ${targetUser.tag} was banned by ${interaction.user.tag}. Reason: ${reason}`);
-            
+
             if (logger) {
                 await logger.logModeration('User Banned', interaction.user, targetUser, {
                     Reason: reason,
@@ -995,7 +1061,7 @@ async function handleSlashCommand(interaction) {
                     Guild: `${interaction.guild.name} (${interaction.guild.id})`
                 });
             }
-            
+
         } catch (error) {
             console.error('Ban command error:', error);
             const errorEmbed = new EmbedBuilder()
@@ -1467,176 +1533,7 @@ if (interaction.commandName === 'add_card') {
 
         return;
     }
-    // --- /bansupport ---
-    if (interaction.commandName === 'bansupport') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-            return await InteractionUtils.sendError(interaction, 'You do not have permission to ban support users.');
-        }
 
-        const user = interaction.options.getUser('user');
-        const reason = interaction.options.getString('reason') || 'No reason provided';
-        
-        if (!user) {
-            return await InteractionUtils.sendError(interaction, 'Please specify a user to ban from support.');
-        }
-
-        try {
-            // Add to support ban list in database (object-based)
-            const supportBans = db.support.get('bans') || [];
-            const existingIndex = supportBans.findIndex(b => b.user_id === user.id);
-            const banRecord = {
-                user_id: user.id,
-                user_tag: user.tag,
-                status: 'active',
-                duration: 'permanent',
-                banned_at: Date.now(),
-                expires_at: null,
-                reason: reason,
-                banned_by: `${interaction.user.tag} (${interaction.user.id})`
-            };
-            if (existingIndex === -1) {
-                supportBans.push(banRecord);
-            } else {
-                supportBans[existingIndex] = { ...supportBans[existingIndex], ...banRecord };
-            }
-            db.support.set('bans', supportBans);
-
-            const embed = new EmbedBuilder()
-                .setColor('Red')
-                .setTitle(' Support Ban')
-                .setDescription(`${user.tag} has been banned from creating support tickets.`)
-                .addFields(
-                    { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
-                    { name: 'Reason', value: reason, inline: true },
-                    { name: 'Moderator', value: interaction.user.tag, inline: true }
-                )
-                .setTimestamp();
-
-            await interaction.reply({ embeds: [embed] });
-
-            if (logger) {
-                await logger.logInfo('Support Ban', {
-                    BannedUser: `${user.tag} (${user.id})`,
-                    Moderator: `${interaction.user.tag} (${interaction.user.id})`,
-                    Reason: reason
-                });
-            }
-
-        } catch (error) {
-            await InteractionUtils.sendError(interaction, `Failed to ban user from support: ${error.message}`);
-        }
-
-        return;
-    }
-
-    // --- /banstats ---
-    if (interaction.commandName === 'banstats') {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
-            return await InteractionUtils.sendError(interaction, 'You do not have permission to view ban statistics.');
-        }
-
-        try {
-            // Get all ban data
-            const supportBans = db.support.get('bans') || [];
-            const banHistory = db.moderation.get('history') || {};
-            const appeals = db.support.get('appeals') || {};
-
-            // Calculate statistics
-            const activeBans = supportBans.filter(ban => ban.status === 'active');
-            const expiredBans = supportBans.filter(ban => ban.status === 'expired');
-            const temporaryBans = activeBans.filter(ban => ban.duration !== 'permanent');
-            const permanentBans = activeBans.filter(ban => ban.duration === 'permanent');
-
-            // Appeal statistics
-            const pendingAppeals = Object.values(appeals).filter(appeal => appeal.status === 'pending');
-            const approvedAppeals = Object.values(appeals).filter(appeal => appeal.status === 'approved');
-            const deniedAppeals = Object.values(appeals).filter(appeal => appeal.status === 'denied');
-
-            // User statistics
-            const totalWarnings = Object.values(banHistory).reduce((sum, user) => sum + (user.warnings || 0), 0);
-            const totalTempBans = Object.values(banHistory).reduce((sum, user) => sum + (user.temp_bans || 0), 0);
-            const totalPermBans = Object.values(banHistory).reduce((sum, user) => sum + (user.perm_bans || 0), 0);
-
-            // Create main stats embed
-            const statsEmbed = new EmbedBuilder()
-                .setColor('Blue')
-                .setTitle('📊 Support Ban Statistics')
-                .setDescription('Comprehensive overview of the support ban system')
-                .addFields(
-                    { name: '🔒 Active Bans', value: `${activeBans.length}`, inline: true },
-                    { name: '⏰ Temporary Bans', value: `${temporaryBans.length}`, inline: true },
-                    { name: '🚫 Permanent Bans', value: `${permanentBans.length}`, inline: true },
-                    { name: '✅ Expired Bans', value: `${expiredBans.length}`, inline: true },
-                    { name: '📋 Pending Appeals', value: `${pendingAppeals.length}`, inline: true },
-                    { name: '✅ Approved Appeals', value: `${approvedAppeals.length}`, inline: true },
-                    { name: '❌ Denied Appeals', value: `${deniedAppeals.length}`, inline: true }
-                )
-                .setTimestamp();
-
-            // Add user history statistics
-            const historyEmbed = new EmbedBuilder()
-                .setColor('Purple')
-                .setTitle('👥 User History Statistics')
-                .addFields(
-                    { name: '⚠️ Total Warnings', value: `${totalWarnings}`, inline: true },
-                    { name: '⏰ Total Temp Bans', value: `${totalTempBans}`, inline: true },
-                    { name: '🚫 Total Perm Bans', value: `${totalPermBans}`, inline: true }
-                )
-                .setTimestamp();
-
-            // Add recent activity (last 5 bans)
-            const recentBans = supportBans
-                .filter(ban => ban.status === 'active')
-                .sort((a, b) => b.banned_at - a.banned_at)
-                .slice(0, 5);
-
-            let recentActivity = 'No recent bans';
-            if (recentBans.length > 0) {
-                recentActivity = recentBans.map((ban, index) => 
-                    `**${index + 1}.** ${ban.user_tag} - ${ban.duration} - <t:${Math.floor(ban.banned_at / 1000)}:R>`
-                ).join('\n');
-            }
-
-            const activityEmbed = new EmbedBuilder()
-                .setColor('Orange')
-                .setTitle('🕐 Recent Activity')
-                .setDescription(recentActivity)
-                .setTimestamp();
-
-            // Add top offenders (users with most bans/warnings)
-            const topOffenders = Object.entries(banHistory)
-                .map(([userId, history]) => ({
-                    userId,
-                    totalActions: (history.warnings || 0) + (history.temp_bans || 0) + (history.perm_bans || 0),
-                    ...history
-                }))
-                .sort((a, b) => b.totalActions - a.totalActions)
-                .slice(0, 5);
-
-            let offendersList = 'No repeat offenders';
-            if (topOffenders.length > 0) {
-                offendersList = topOffenders.map((offender, index) => 
-                    `**${index + 1}.** <@${offender.userId}> - ${offender.totalActions} actions (W: ${offender.warnings || 0}, T: ${offender.temp_bans || 0}, P: ${offender.perm_bans || 0})`
-                ).join('\n');
-            }
-
-            const offendersEmbed = new EmbedBuilder()
-                .setColor('Red')
-                .setTitle('⚠️ Top Offenders')
-                .setDescription(offendersList)
-                .setTimestamp();
-
-            await interaction.reply({ 
-                embeds: [statsEmbed, historyEmbed, activityEmbed, offendersEmbed],
-                flags: MessageFlags.Ephemeral 
-            });
-
-        } catch (error) {
-            await InteractionUtils.sendError(interaction, `Failed to fetch ban statistics: ${error.message}`);
-        }
-
-        return;
-    }
 
     // --- /sendmessage ---
     if (interaction.commandName === 'sendmessage') {

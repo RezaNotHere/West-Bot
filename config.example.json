@@ -48,7 +48,7 @@
     "errorWebhook": "YOUR_ERROR_WEBHOOK_URL_HERE",
     "_error_help": "Discord webhook URL for error notifications. Create in channel settings",
     "banSupport": "YOUR_BAN_SUPPORT_CHANNEL_ID",
-    "_ban_help": "Channel for ban appeals and support",
+    "_ban_help": "Channel for server ban appeals and support",
     "closedTicketsCategory": "YOUR_CLOSED_TICKETS_CATEGORY_ID",
     "_closed_tickets_help": "Category where closed tickets are moved",
     "review": "YOUR_REVIEW_CHANNEL_ID",
